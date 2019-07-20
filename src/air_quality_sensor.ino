@@ -18,7 +18,7 @@ void setup()
     Serial.begin(9600);
     while (!Serial)
     {
-        yield();
+        Particle.process();
     }
     delay(3000);
 }
