@@ -1,22 +1,32 @@
 #include "DataLogger.h"
 #include "RTClibrary.h"
 
+// Declare functions
+void uploadData();
+void readSensors();
+
+// Global variables
+DataLogger logger;
+RTC_DS3231 rtc;
+
+// Counters
 int total = 0;
 int success = 0;
 int failures = 0;
-DataLogger logger;
-RTC_DS3231 rtc;
+
+// LED statuses
 LEDStatus errorLEDStatus(RGB_COLOR_RED, LED_PATTERN_SOLID, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
 LEDStatus normaLEDStatus(RGB_COLOR_BLUE, LED_PATTERN_FADE, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
+
+// Timers to run functionality
+Timer sensorTimer(1000, readSensors);
+Timer uploadTimer(1000, uploadData);
 
 // SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(MANUAL);
 
 void setup()
 {
-    normaLEDStatus.setActive(true);
-
-    // Open serial communications and wait for port to open:
     Serial.begin(9600);
     while (!Serial)
     {
@@ -28,13 +38,27 @@ void setup()
     {
         Serial.println("Couldn't find RTC");
     }
+
+    sensorTimer.start();
+    // uploadTimer.start();
 }
 
 void loop()
 {
+}
+
+void readSensors()
+{
+    ////////////////////////////////////
+    //       READ SENSORS HERE        //
+    ////////////////////////////////////
     DateTime now = rtc.now();
+
+    // TODO: Format data
+
     String data = String(now.unixtime()) + " " + String(success) + " " + String(failures) + " " + String(total);
 
+    // Write data to SD card
     if (logger.write(data))
     {
         normaLEDStatus.setActive(true);
@@ -47,5 +71,9 @@ void loop()
     }
     total++;
     Serial.println(data + "\n");
-    delay(1000);
+}
+
+void uploadData()
+{
+    Serial.println("Upload data...\n");
 }
