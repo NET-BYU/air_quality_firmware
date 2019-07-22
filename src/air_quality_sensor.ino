@@ -53,6 +53,7 @@ void readSensors()
     //       READ SENSORS HERE        //
     ////////////////////////////////////
     DateTime now = rtc.now();
+    int32_t rtcTemperature = rtc.getTemperature();
 
     // TODO: Format data
 
