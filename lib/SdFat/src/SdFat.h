@@ -371,7 +371,6 @@ public:
    */
   bool begin(uint8_t csPin = SS, SPISettings spiSettings = SPI_FULL_SPEED)
   {
-    Serial.println("Trying to set up SD card");
     return m_card.begin(&m_spi, csPin, spiSettings) &&
            SdFileSystem::begin();
   }
