@@ -72,7 +72,7 @@ void loop()
                   String(sequence);
 
     // Insert data into queue to be published
-    publishQueue.publish("mn/d", data.c_str(), 60, PRIVATE, WITH_ACK);
+    // publishQueue.publish("mn/d", data.c_str(), 60, PRIVATE, WITH_ACK);
 
     // Write data to SD card
     if (logger.write(data))
