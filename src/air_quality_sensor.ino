@@ -55,11 +55,17 @@ void readSensors()
     DateTime now = rtc.now();
     int32_t rtcTemperature = rtc.getTemperature();
     uint32_t freeMem = System.freeMemory();
-
+    uint32_t osVersion = System.versionNumber();
 
     // TODO: Format data
 
-    String data = String(now.unixtime()) + " " + String(rtcTemperature) + " " + String(freeMem) + " " + String(success) + " " + String(failures) + " " + String(sequence);
+    String data = String(now.unixtime()) + " " +
+                  String(osVersion) + " " +
+                  String(rtcTemperature) + " " +
+                  String(freeMem) + " " +
+                  String(success) + " " +
+                  String(failures) + " " +
+                  String(sequence);
 
     // Write data to SD card
     if (logger.write(data))
