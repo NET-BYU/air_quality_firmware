@@ -18,8 +18,8 @@ int success = 0;
 int failures = 0;
 
 // Timing related to reading the sensors
-const unsigned long READ_PERIOD_MS = 30000;
-unsigned long lastRead = 8000 - READ_PERIOD_MS;
+const unsigned long READ_PERIOD_MS = 1000;
+unsigned long lastRead = 0;
 
 // LED statuses
 LEDStatus errorLEDStatus(RGB_COLOR_RED, LED_PATTERN_SOLID, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
