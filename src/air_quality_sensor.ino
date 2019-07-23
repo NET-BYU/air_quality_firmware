@@ -10,7 +10,7 @@ DataLogger logger;
 RTC_DS3231 rtc;
 
 // Counters
-int total = 0;
+int sequence = 0;
 int success = 0;
 int failures = 0;
 
@@ -59,7 +59,7 @@ void readSensors()
 
     // TODO: Format data
 
-    String data = String(now.unixtime()) + " " + String(rtcTemperature) + " " + String(freeMem) + " " + String(success) + " " + String(failures) + " " + String(total);
+    String data = String(now.unixtime()) + " " + String(rtcTemperature) + " " + String(freeMem) + " " + String(success) + " " + String(failures) + " " + String(sequence);
 
     // Write data to SD card
     if (logger.write(data))
@@ -72,7 +72,7 @@ void readSensors()
         errorLEDStatus.setActive(true);
         failures++;
     }
-    total++;
+    sequence++;
     Serial.println(data + "\n");
 }
 
