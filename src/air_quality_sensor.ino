@@ -4,9 +4,8 @@
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
 
-// Queue
-retained uint8_t publishQueueRetainedBuffer[2048];
-PublishQueueAsync publishQueue(publishQueueRetainedBuffer, sizeof(publishQueueRetainedBuffer));
+#define READ_PERIOD_MS 1000
+#define UPLOAD_PERIOD_MS 5000
 
 // SD Card
 DataLogger logger;
@@ -26,13 +25,19 @@ int sequence = 0;
 int success = 0;
 int failures = 0;
 
-// Timing related to reading the sensors
-const unsigned long READ_PERIOD_MS = 1000;
-unsigned long lastRead = 0;
+// Publishing information
+particle::Future<bool> currentPublish;
+bool currentlyPublishing = false;
 
 // LED statuses
 LEDStatus errorLEDStatus(RGB_COLOR_RED, LED_PATTERN_SOLID, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
 LEDStatus normaLEDStatus(RGB_COLOR_BLUE, LED_PATTERN_FADE, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
+
+// Timers
+Timer readTimer(READ_PERIOD_MS, updateReadDataFlag);
+bool readDataFlag = true;
+Timer uploadTimer(UPLOAD_PERIOD_MS, updateUploadFlag);
+bool uploadFlag = true;
 
 // SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(MANUAL);
@@ -57,21 +62,62 @@ void setup()
         Serial.println("Could not start CO2 sensor!");
     }
 
-    publishQueue.setup();
+    readTimer.start();
+    uploadTimer.start();
 }
 
 void loop()
 {
-    if (millis() - lastRead < READ_PERIOD_MS)
+    // Read sensor task
+    if (readDataFlag)
     {
-        return;
+        String data = readSensors();
+
+        // Write data to SD card
+        if (logger.write(data))
+        {
+            normaLEDStatus.setActive(true);
+            success++;
+        }
+        else
+        {
+            errorLEDStatus.setActive(true);
+            failures++;
+        }
+
+        sequence++;
+        Serial.println(data + "\n");
+        readDataFlag = false;
     }
 
-    lastRead = millis();
+    // Check on message that is currently being published
+    if (currentlyPublishing && currentPublish.isDone())
+    {
+        if (currentPublish.isSucceeded())
+        {
+            // Update queue
+            logger.ackData();
+        }
 
-    ////////////////////////////////////
-    //       READ SENSORS HERE        //
-    ////////////////////////////////////
+        currentlyPublishing = false;
+    }
+
+    // Upload data
+    if (uploadFlag)
+    {
+        if (!currentlyPublishing && Particle.connected() && logger.hasNext())
+        {
+            uint32_t data = logger.getNext();
+            currentPublish = Particle.publish("mn/d", String(data), 60, PRIVATE, WITH_ACK);
+            currentlyPublishing = true;
+        }
+
+        uploadFlag = false;
+    }
+}
+
+String readSensors()
+{
     String data = "";
 
     DateTime now = rtc.now();
@@ -108,20 +154,15 @@ void loop()
         data += String(humidity) + " ";
     }
 
-    // Insert data into queue to be published
-    // publishQueue.publish("mn/d", data.c_str(), 60, PRIVATE, WITH_ACK);
+    return data;
+}
 
-    // Write data to SD card
-    if (logger.write(data))
-    {
-        normaLEDStatus.setActive(true);
-        success++;
-    }
-    else
-    {
-        errorLEDStatus.setActive(true);
-        failures++;
-    }
-    sequence++;
-    Serial.println(data + "\n");
+void updateReadDataFlag()
+{
+    readDataFlag = true;
+}
+
+void updateUploadFlag()
+{
+    uploadFlag = true;
 }
