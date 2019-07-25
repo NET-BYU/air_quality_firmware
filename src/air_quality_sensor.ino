@@ -1,6 +1,8 @@
 #include "DataLogger.h"
 #include "PublishQueueAsyncRK.h"
 #include "RTClibrary.h"
+#include "SparkFun_SCD30_Arduino_Library.h"
+#include "SPS30.h"
 
 // Queue
 retained uint8_t publishQueueRetainedBuffer[2048];
@@ -8,6 +10,13 @@ PublishQueueAsync publishQueue(publishQueueRetainedBuffer, sizeof(publishQueueRe
 
 // SD Card
 DataLogger logger;
+
+// PM Sensor
+SPS30 pmSensor;
+float pmMeasurement[4];
+
+// CO2 + Temp + Humidity Sensor
+SCD30 airSensor;
 
 // RTC
 RTC_DS3231 rtc;
@@ -31,15 +40,21 @@ SYSTEM_MODE(MANUAL);
 void setup()
 {
     Serial.begin(9600);
-    while (!Serial)
-    {
-        Particle.process();
-    }
     delay(3000);
 
     if (!rtc.begin())
     {
-        Serial.println("Couldn't find RTC");
+        Serial.println("Could not start RTC!");
+    }
+
+    if (!pmSensor.begin())
+    {
+        Serial.println("Could not start PM sensor!");
+    }
+
+    if (!airSensor.begin())
+    {
+        Serial.println("Could not start CO2 sensor!");
     }
 
     publishQueue.setup();
@@ -57,19 +72,41 @@ void loop()
     ////////////////////////////////////
     //       READ SENSORS HERE        //
     ////////////////////////////////////
-    DateTime now = rtc.now();
-    int32_t rtcTemperature = rtc.getTemperature();
-    uint32_t freeMem = System.freeMemory();
-    uint32_t osVersion = System.versionNumber();
+    String data = "";
 
-    // TODO: Format data
-    String data = String(now.unixtime()) + " " +
-                  String(osVersion) + " " +
-                  String(rtcTemperature) + " " +
-                  String(freeMem) + " " +
-                  String(success) + " " +
-                  String(failures) + " " +
-                  String(sequence);
+    DateTime now = rtc.now();
+    data += String(now.unixtime()) + " ";
+
+    data += String(sequence) + " ";
+
+    uint32_t osVersion = System.versionNumber();
+    data += String(osVersion) + " ";
+
+    int32_t rtcTemperature = rtc.getTemperature();
+    data += String(rtcTemperature) + " ";
+
+    uint32_t freeMem = System.freeMemory();
+    data += String(freeMem) + " ";
+
+    data += String(failures) + " ";
+
+    if (pmSensor.dataAvailable())
+    {
+        pmSensor.getMass(pmMeasurement);
+        data += String(pmMeasurement[0]) + " " + String(pmMeasurement[1]) + " " + String(pmMeasurement[2]) + " " + String(pmMeasurement[3]) + " ";
+    }
+
+    if (airSensor.dataAvailable())
+    {
+        uint32_t co2 = airSensor.getCO2();
+        data += String(co2) + " ";
+
+        float temp = airSensor.getTemperature();
+        data += String(temp) + " ";
+
+        float humidity = airSensor.getHumidity();
+        data += String(humidity) + " ";
+    }
 
     // Insert data into queue to be published
     // publishQueue.publish("mn/d", data.c_str(), 60, PRIVATE, WITH_ACK);
