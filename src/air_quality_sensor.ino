@@ -1,5 +1,6 @@
 #include "base85.h"
 #include "DataLogger.h"
+#include "jled.h"
 #include "pb_encode.h"
 #include "PublishQueueAsyncRK.h"
 #include "RTClibrary.h"
@@ -8,7 +9,7 @@
 #include "SPS30.h"
 
 #define READ_PERIOD_MS 15000
-#define UPLOAD_PERIOD_MS 15500
+#define UPLOAD_PERIOD_MS 1000
 
 #define LED1 D6
 #define LED2 D7
@@ -39,8 +40,13 @@ particle::Future<bool> currentPublish;
 bool currentlyPublishing = false;
 
 // LED statuses
-LEDStatus errorLEDStatus(RGB_COLOR_RED, LED_PATTERN_SOLID, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
-LEDStatus normaLEDStatus(RGB_COLOR_BLUE, LED_PATTERN_FADE, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
+// LEDStatus errorLEDStatus(RGB_COLOR_RED, LED_PATTERN_SOLID, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
+// LEDStatus normaLEDStatus(RGB_COLOR_BLUE, LED_PATTERN_FADE, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
+auto successfulBootLED = JLed(LED1).On();
+auto failedBootLED = JLed(LED1).Blink(500, 500).Forever();
+auto bootLED = successfulBootLED;
+auto readLED = JLed(LED2);
+auto publishLED = JLed(LED3);
 
 // Timers
 Timer readTimer(READ_PERIOD_MS, updateReadDataFlag);
@@ -60,7 +66,7 @@ SYSTEM_THREAD(ENABLED);
 
 void setup()
 {
-    WiFi.setCredentials("BYU-WiFi");
+    bool success = true;
 
     Serial.begin(9600);
     delay(3000);
@@ -68,16 +74,19 @@ void setup()
     if (!rtc.begin())
     {
         Log.error("Could not start RTC!");
+        success = false;
     }
 
     if (!pmSensor.begin())
     {
         Log.error("Could not start PM sensor!");
+        success = false;
     }
 
     if (!airSensor.begin())
     {
         Log.error("Could not start CO2 sensor!");
+        success = false;
     }
 
     readTimer.start();
@@ -85,11 +94,13 @@ void setup()
 
     // Set up LEDs
     pinMode(LED1, OUTPUT);
-    digitalWrite(LED1, HIGH);
     pinMode(LED2, OUTPUT);
-    digitalWrite(LED2, HIGH);
     pinMode(LED3, OUTPUT);
-    digitalWrite(LED3, HIGH);
+
+    if (!success)
+    {
+        bootLED = failedBootLED;
+    }
 }
 
 void loop()
@@ -102,7 +113,7 @@ void loop()
         readSensors(&packet);
         printPacket(&packet);
 
-        Log.info("Putting data into a protobuf and base64 encoding...");
+        Log.info("Putting data into a protobuf and base85 encoding...");
         encode(&packet, publishData);
 
         // TODO: Normally we would write to a file, but since we are testing, we are writing to an array
@@ -112,12 +123,12 @@ void loop()
         if (true /*logger.write(packet)*/)
         {
             sdCardSuccess = true;
-            normaLEDStatus.setActive(true);
+            readLED.Blink(4000, 500);
         }
         else
         {
             sdCardSuccess = false;
-            errorLEDStatus.setActive(true);
+            readLED.Blink(500, 500).Forever();
         }
 
         sequence++;
@@ -132,11 +143,13 @@ void loop()
             // Update queue
             // logger.ackData();
             Log.info("Publication was successful!");
+            publishLED.Blink(4000, 500);
             uploaded = true;
         }
         else
         {
             Log.warn("Publication was NOT successful!");
+            publishLED.Blink(500, 500).Forever();
         }
 
         currentlyPublishing = false;
@@ -145,10 +158,10 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.info("Trying to upload data...");
-        Log.info("\tcurrentlyPublishing: %d", currentlyPublishing);
-        Log.info("\tParticle.connected(): %d", Particle.connected());
-        Log.info("\tuploaded: %d", uploaded);
+        // Log.info("Trying to upload data...");
+        // Log.info("\tcurrentlyPublishing: %d", currentlyPublishing);
+        // Log.info("\tParticle.connected(): %d", Particle.connected());
+        // Log.info("\tuploaded: %d", uploaded);
         if (!currentlyPublishing && Particle.connected() /*&& logger.hasNext()*/ && !uploaded)
         {
             // uint32_t data = logger.getNext();
@@ -160,6 +173,11 @@ void loop()
 
         uploadFlag = false;
     }
+
+    // Update LEDs
+    bootLED.Update();
+    readLED.Update();
+    publishLED.Update();
 }
 
 void readSensors(SensorPacket *packet)
