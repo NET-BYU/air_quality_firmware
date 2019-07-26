@@ -1,4 +1,4 @@
-#include "Base64RK.h"
+#include "base85.h"
 #include "DataLogger.h"
 #include "pb_encode.h"
 #include "PublishQueueAsyncRK.h"
@@ -29,8 +29,10 @@ RTC_DS3231 rtc;
 
 // Counters
 int sequence = 0;
-int success = 0;
-int failures = 0;
+
+// Global variables to keep track of state
+bool sdCardSuccess = true;
+uint32_t queueSize = 0;
 
 // Publishing information
 particle::Future<bool> currentPublish;
@@ -107,16 +109,16 @@ void loop()
         uploaded = false;
 
         // Write data to SD card
-        // if (logger.write(packet))
-        // {
-        //     normaLEDStatus.setActive(true);
-        //     success++;
-        // }
-        // else
-        // {
-        //     errorLEDStatus.setActive(true);
-        //     failures++;
-        // }
+        if (true /*logger.write(packet)*/)
+        {
+            sdCardSuccess = true;
+            normaLEDStatus.setActive(true);
+        }
+        else
+        {
+            sdCardSuccess = false;
+            errorLEDStatus.setActive(true);
+        }
 
         sequence++;
         readDataFlag = false;
@@ -178,6 +180,12 @@ void readSensors(SensorPacket *packet)
     uint32_t freeMem = System.freeMemory();
     Serial.printf("Free memory: %d\n", freeMem);
 
+    packet->card_present = sdCardSuccess;
+    packet->has_card_present = true;
+
+    packet->queue_size = queueSize;
+    packet->has_queue_size = true;
+
     if (pmSensor.dataAvailable())
     {
         pmSensor.getMass(pmMeasurement);
@@ -217,16 +225,9 @@ bool encode(SensorPacket *in_packet, char *out)
         Log.error("Unable to encode data into protobuffer");
         return false;
     }
-
     Log.info("Bytes written to protobuffer: %d", stream.bytes_written);
-    size_t encodedLen = Base64::getEncodedSize(stream.bytes_written, true);
-    Log.info("Encoded length: %d", encodedLen);
 
-    if (!Base64::encode(buffer, stream.bytes_written, out, encodedLen, true))
-    {
-        Log.error("Unable to base64 encode data");
-        return false;
-    }
+    bintob85(publishData, buffer, stream.bytes_written);
 
     return true;
 }
