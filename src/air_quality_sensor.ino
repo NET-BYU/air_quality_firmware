@@ -42,9 +42,7 @@ bool currentlyPublishing = false;
 // LED statuses
 // LEDStatus errorLEDStatus(RGB_COLOR_RED, LED_PATTERN_SOLID, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
 // LEDStatus normaLEDStatus(RGB_COLOR_BLUE, LED_PATTERN_FADE, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
-auto successfulBootLED = JLed(LED1).On();
-auto failedBootLED = JLed(LED1).Blink(500, 500).Forever();
-auto bootLED = successfulBootLED;
+auto bootLED = JLed(LED1);
 auto readLED = JLed(LED2);
 auto publishLED = JLed(LED3);
 
@@ -99,7 +97,11 @@ void setup()
 
     if (!success)
     {
-        bootLED = failedBootLED;
+        bootLED.Blink(500, 500).Forever();
+    }
+    else
+    {
+        bootLED.Blink(1000, 1000);
     }
 }
 
@@ -108,6 +110,7 @@ void loop()
     // Read sensor task
     if (readDataFlag)
     {
+        readLED.On().Update();
         Log.info("Reading sensors...");
         SensorPacket packet = SensorPacket_init_zero;
         readSensors(&packet);
@@ -123,12 +126,12 @@ void loop()
         if (true /*logger.write(packet)*/)
         {
             sdCardSuccess = true;
-            readLED.Blink(4000, 500);
+            readLED.Off().Update();
         }
         else
         {
             sdCardSuccess = false;
-            readLED.Blink(500, 500).Forever();
+            readLED.Blink(250, 250).Forever();
         }
 
         sequence++;
@@ -143,13 +146,13 @@ void loop()
             // Update queue
             // logger.ackData();
             Log.info("Publication was successful!");
-            publishLED.Blink(4000, 500);
+            publishLED.Off().Update();
             uploaded = true;
         }
         else
         {
             Log.warn("Publication was NOT successful!");
-            publishLED.Blink(500, 500).Forever();
+            publishLED.Blink(250, 250).Forever();
         }
 
         currentlyPublishing = false;
@@ -169,6 +172,7 @@ void loop()
             Log.info("Publishing data: " + String(publishData));
             currentPublish = Particle.publish("mn/d", publishData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
+            publishLED.On().Update();
         }
 
         uploadFlag = false;
