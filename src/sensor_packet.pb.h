@@ -36,6 +36,8 @@ typedef struct _SensorPacket {
     bool card_present;
     bool has_queue_size;
     int32_t queue_size;
+    bool has_app_version;
+    int32_t app_version;
     bool has_co2;
     int32_t co2;
     bool has_voltage;
@@ -51,8 +53,8 @@ typedef struct _SensorPacket {
 
 
 /* Initializer values for message structs */
-#define SensorPacket_init_default                {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define SensorPacket_init_zero                   {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define SensorPacket_init_default                {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define SensorPacket_init_zero                   {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define SensorPacket_timestamp_tag               1
@@ -66,6 +68,7 @@ typedef struct _SensorPacket {
 #define SensorPacket_pm10_tag                    9
 #define SensorPacket_card_present_tag            10
 #define SensorPacket_queue_size_tag              11
+#define SensorPacket_app_version_tag              12
 #define SensorPacket_co2_tag                     16
 #define SensorPacket_voltage_tag                 17
 #define SensorPacket_current_tag                 18
@@ -85,6 +88,7 @@ X(a, STATIC, OPTIONAL, INT32, pm4, 8) \
 X(a, STATIC, OPTIONAL, INT32, pm10, 9) \
 X(a, STATIC, OPTIONAL, BOOL, card_present, 10) \
 X(a, STATIC, OPTIONAL, INT32, queue_size, 11) \
+X(a, STATIC, OPTIONAL, INT32, app_version, 12) \
 X(a, STATIC, OPTIONAL, INT32, co2, 16) \
 X(a, STATIC, OPTIONAL, INT32, voltage, 17) \
 X(a, STATIC, OPTIONAL, INT32, current, 18) \
@@ -99,7 +103,7 @@ extern const pb_msgdesc_t SensorPacket_msg;
 #define SensorPacket_fields &SensorPacket_msg
 
 /* Maximum encoded size of messages (where known) */
-#define SensorPacket_size                        162
+#define SensorPacket_size                        173
 
 #ifdef __cplusplus
 } /* extern "C" */
