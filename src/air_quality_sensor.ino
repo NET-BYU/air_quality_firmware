@@ -8,7 +8,7 @@
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
 
-#define READ_PERIOD_MS 15000
+#define READ_PERIOD_MS 60000
 #define UPLOAD_PERIOD_MS 1000
 
 #define LED1 D6
