@@ -44,13 +44,15 @@ typedef struct _SensorPacket {
     int32_t current;
     bool has_watt_hours;
     int32_t watt_hours;
+    bool has_reset_reason;
+    int32_t reset_reason;
 /* @@protoc_insertion_point(struct:SensorPacket) */
 } SensorPacket;
 
 
 /* Initializer values for message structs */
-#define SensorPacket_init_default                {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define SensorPacket_init_zero                   {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define SensorPacket_init_default                {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define SensorPacket_init_zero                   {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define SensorPacket_timestamp_tag               1
@@ -68,6 +70,7 @@ typedef struct _SensorPacket {
 #define SensorPacket_voltage_tag                 17
 #define SensorPacket_current_tag                 18
 #define SensorPacket_watt_hours_tag              19
+#define SensorPacket_reset_reason_tag            20
 
 /* Struct field encoding specification for nanopb */
 #define SensorPacket_FIELDLIST(X, a) \
@@ -85,7 +88,8 @@ X(a, STATIC, OPTIONAL, INT32, queue_size, 11) \
 X(a, STATIC, OPTIONAL, INT32, co2, 16) \
 X(a, STATIC, OPTIONAL, INT32, voltage, 17) \
 X(a, STATIC, OPTIONAL, INT32, current, 18) \
-X(a, STATIC, OPTIONAL, INT32, watt_hours, 19)
+X(a, STATIC, OPTIONAL, INT32, watt_hours, 19) \
+X(a, STATIC, OPTIONAL, INT32, reset_reason, 20)
 #define SensorPacket_CALLBACK NULL
 #define SensorPacket_DEFAULT NULL
 
@@ -95,7 +99,7 @@ extern const pb_msgdesc_t SensorPacket_msg;
 #define SensorPacket_fields &SensorPacket_msg
 
 /* Maximum encoded size of messages (where known) */
-#define SensorPacket_size                        150
+#define SensorPacket_size                        162
 
 #ifdef __cplusplus
 } /* extern "C" */

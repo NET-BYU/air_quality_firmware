@@ -34,6 +34,7 @@ int sequence = 0;
 // Global variables to keep track of state
 bool sdCardSuccess = true;
 uint32_t queueSize = 0;
+int resetReason = RESET_REASON_NONE;
 
 // Publishing information
 particle::Future<bool> currentPublish;
@@ -59,12 +60,15 @@ SerialLogHandler logHandler;
 char publishData[256];
 bool uploaded = true;
 
+// Particle System Stuff
 SYSTEM_THREAD(ENABLED);
+STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 // SYSTEM_MODE(MANUAL);
 
 void setup()
 {
     bool success = true;
+    resetReason = System.resetReason();
 
     Serial.begin(9600);
     delay(3000);
@@ -191,16 +195,12 @@ void readSensors(SensorPacket *packet)
 
     packet->sequence = sequence;
 
-    // TODO: Add osVersion
-    // uint32_t osVersion = System.versionNumber();
-
     int32_t rtcTemperature = rtc.getTemperature();
     packet->rtc_temperature = rtcTemperature;
     packet->has_rtc_temperature = true;
 
-    // TODO: Add freeMemory
     uint32_t freeMem = System.freeMemory();
-    Serial.printf("Free memory: %d\n", freeMem);
+    Log.info("Free memory: %ld\n", freeMem);
 
     packet->card_present = sdCardSuccess;
     packet->has_card_present = true;
@@ -234,6 +234,15 @@ void readSensors(SensorPacket *packet)
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
+    }
+
+    if (resetReason != RESET_REASON_NONE)
+    {
+        packet->reset_reason = resetReason;
+        packet->has_reset_reason = true;
+
+        // Make sure to read reset reason only once
+        resetReason = RESET_REASON_NONE;
     }
 }
 
