@@ -1,5 +1,4 @@
 #include "base85.h"
-#include "DataLogger.h"
 #include "jled.h"
 #include "pb_encode.h"
 #include "PublishQueueAsyncRK.h"
@@ -15,8 +14,6 @@
 #define LED2 D7
 #define LED3 D8
 
-// SD Card
-DataLogger logger;
 
 // PM Sensor
 SPS30 pmSensor;
