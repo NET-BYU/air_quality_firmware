@@ -4,8 +4,10 @@
 #include "PublishQueueAsyncRK.h"
 #include "RTClibrary.h"
 #include "sensor_packet.pb.h"
+#include "SimpleAckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
+#include "SQLAckTracker.h"
 
 #define READ_PERIOD_MS 60000
 #define UPLOAD_PERIOD_MS 1000
@@ -14,6 +16,8 @@
 #define LED2 D7
 #define LED3 D8
 
+// Write data points to SD card and keep track of what has been ackowledged
+SimpleAckTracker tracker;
 
 // PM Sensor
 SPS30 pmSensor;
