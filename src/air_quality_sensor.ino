@@ -64,7 +64,6 @@ bool uploaded = true;
 // Particle System Stuff
 SYSTEM_THREAD(ENABLED);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
-#define VERSION 1
 
 void setup()
 {
@@ -245,11 +244,6 @@ void readSensors(SensorPacket *packet)
         // Make sure to read reset reason only once
         resetReason = RESET_REASON_NONE;
     }
-
-#ifdef VERSION
-    packet->app_version = VERSION;
-    packet->has_app_version = true;
-#endif
 }
 
 bool encode(SensorPacket *in_packet, char *out)
