@@ -258,7 +258,7 @@ bool encode(SensorPacket *in_packet, char *out)
     }
     Log.info("Bytes written to protobuffer: %d", stream.bytes_written);
 
-    bintob85(publishData, buffer, stream.bytes_written);
+    bintob85(out, buffer, stream.bytes_written);
 
     return true;
 }
