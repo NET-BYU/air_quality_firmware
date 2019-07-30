@@ -11,6 +11,7 @@
 
 #define READ_PERIOD_MS 60000
 #define UPLOAD_PERIOD_MS 1000
+#define PRINT_SYS_INFO_MS 5000
 
 #define LED1 D6
 #define LED2 D7
@@ -46,10 +47,12 @@ auto readLED = JLed(LED2);
 auto publishLED = JLed(LED3);
 
 // Timers
-Timer readTimer(READ_PERIOD_MS, updateReadDataFlag);
 bool readDataFlag = true;
-Timer uploadTimer(UPLOAD_PERIOD_MS, updateUploadFlag);
+Timer readTimer(READ_PERIOD_MS, []() { readDataFlag = true; });
 bool uploadFlag = true;
+Timer uploadTimer(UPLOAD_PERIOD_MS, []() { uploadFlag = true; });
+bool printSystemInfoFlag = true;
+Timer printSystemInfoTimer(PRINT_SYS_INFO_MS, []() { printSystemInfoFlag = true; });
 
 // Logging
 SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}});
@@ -84,9 +87,6 @@ void setup()
         success = false;
     }
 
-    readTimer.start();
-    uploadTimer.start();
-
     // Set up LEDs
     pinMode(LED1, OUTPUT);
     pinMode(LED2, OUTPUT);
@@ -100,6 +100,11 @@ void setup()
     {
         bootLED.Blink(1000, 1000);
     }
+
+    // Start timers
+    readTimer.start();
+    uploadTimer.start();
+    printSystemInfoTimer.start();
 }
 
 void loop()
@@ -178,6 +183,12 @@ void loop()
         uploadFlag = false;
     }
 
+    if (printSystemInfoFlag)
+    {
+        printSystemInfo();
+        printSystemInfoFlag = false;
+    }
+
     // Update LEDs
     bootLED.Update();
     readLED.Update();
@@ -194,9 +205,6 @@ void readSensors(SensorPacket *packet)
     int32_t rtcTemperature = rtc.getTemperature();
     packet->rtc_temperature = rtcTemperature;
     packet->has_rtc_temperature = true;
-
-    uint32_t freeMem = System.freeMemory();
-    Log.info("Free memory: %ld", freeMem);
 
     packet->card_present = saveDataSucess;
     packet->has_card_present = true;
@@ -260,14 +268,24 @@ bool encode(SensorPacket *in_packet, uint8_t *out, uint32_t *length)
     return true;
 }
 
-void updateReadDataFlag()
+void printSystemInfo()
 {
-    readDataFlag = true;
-}
+    uint32_t freeMem = System.freeMemory();
+    Log.info("Free memory: %ld", freeMem);
 
-void updateUploadFlag()
-{
-    uploadFlag = true;
+#if Wiring_WiFi
+    WiFiSignal sig = WiFi.RSSI();
+    Log.info("WiFi quality: %.02f (%.02f)", sig.getQualityValue(), sig.getStrengthValue());
+#endif // Wiring_WiFi
+
+#if Wiring_Cellular
+    CellularData data;
+    Cellular.getDataUsage(data);
+    Log.info("Cell usage: TX – %d, RX – %d", data.tx_total, data.rx_total);
+
+    CellularSignal sig = Cellular.RSSI();
+    Log.info("Cell quality: %d (%d)", sig.qual, sig.rssi);
+#endif // Wiring_Cellular
 }
 
 void printPacket(SensorPacket *packet)
