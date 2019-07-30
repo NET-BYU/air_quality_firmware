@@ -164,7 +164,7 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d)", currentlyPublishing, Particle.connected(), tracker.amount() > 0);
+        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.amount() > 0);
         if (!currentlyPublishing && Particle.connected() && tracker.amount() > 0)
         {
             AckTracker::Packet packet = tracker.next();
