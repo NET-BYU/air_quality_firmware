@@ -52,7 +52,7 @@ Timer uploadTimer(UPLOAD_PERIOD_MS, updateUploadFlag);
 bool uploadFlag = true;
 
 // Logging
-SerialLogHandler logHandler(LOG_LEVEL_TRACE);
+SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}});
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -108,12 +108,12 @@ void loop()
     if (readDataFlag)
     {
         readLED.On().Update();
-        Log.trace("Reading sensors...");
+        Log.info("Reading sensors...");
         SensorPacket packet = SensorPacket_init_zero;
         readSensors(&packet);
         printPacket(&packet);
 
-        Log.trace("Putting data into a protobuf and base85 encoding...");
+        Log.info("Putting data into a protobuf and base85 encoding...");
         uint8_t *data = new uint8_t[256]; // TODO: Temporary, do not allocate on the heap
         uint32_t length;
 
@@ -146,7 +146,7 @@ void loop()
     {
         if (currentPublish.isSucceeded())
         {
-            Log.trace("Publication was successful!");
+            Log.info("Publication was successful!");
             AckTracker::Packet packet = tracker.next(); // TODO: Temporary, remove completely
             tracker.confirmNext();
             delete packet.data; // TODO: Temporary, remove completely
@@ -169,7 +169,7 @@ void loop()
         {
             AckTracker::Packet packet = tracker.next();
 
-            Log.trace("Publishing data: " + String((char *)packet.data));
+            Log.info("Publishing data: " + String((char *)packet.data));
             currentPublish = Particle.publish("mn/d", (char *)packet.data, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
@@ -196,7 +196,7 @@ void readSensors(SensorPacket *packet)
     packet->has_rtc_temperature = true;
 
     uint32_t freeMem = System.freeMemory();
-    Log.trace("Free memory: %ld\n", freeMem);
+    Log.info("Free memory: %ld", freeMem);
 
     packet->card_present = saveDataSucess;
     packet->has_card_present = true;
@@ -272,20 +272,20 @@ void updateUploadFlag()
 
 void printPacket(SensorPacket *packet)
 {
-    Log.trace("Packet:\n");
-    Log.trace("\tTimestamp: %d\n", packet->timestamp);
-    Log.trace("\tSequence: %d\n", packet->sequence);
-    Log.trace("\tTemperature: %d\n", packet->temperature);
-    Log.trace("\tHumidity: %d\n", packet->humidity);
-    Log.trace("\tRTC temperature: %d\n", packet->rtc_temperature);
-    Log.trace("\tPM1: %d\n", packet->pm1);
-    Log.trace("\tPM2.5: %d\n", packet->pm2_5);
-    Log.trace("\tPM4: %d\n", packet->pm4);
-    Log.trace("\tPM10: %d\n", packet->pm10);
-    Log.trace("\tCard present: %d\n", packet->card_present);
-    Log.trace("\tQueue size: %d\n", packet->queue_size);
-    Log.trace("\tC02: %d\n", packet->co2);
-    Log.trace("\tVoltage: %d\n", packet->voltage);
-    Log.trace("\tCurrent: %d\n", packet->current);
-    Log.trace("\tWatt Hours: %d\n", packet->watt_hours);
+    Log.info("Packet:");
+    Log.info("\tTimestamp: %ld", packet->timestamp);
+    Log.info("\tSequence: %ld", packet->sequence);
+    Log.info("\tTemperature: %ld", packet->temperature);
+    Log.info("\tHumidity: %ld", packet->humidity);
+    Log.info("\tRTC temperature: %ld", packet->rtc_temperature);
+    Log.info("\tPM1: %ld", packet->pm1);
+    Log.info("\tPM2.5: %ld", packet->pm2_5);
+    Log.info("\tPM4: %ld", packet->pm4);
+    Log.info("\tPM10: %ld", packet->pm10);
+    Log.info("\tCard present: %d", packet->card_present);
+    Log.info("\tQueue size: %ld", packet->queue_size);
+    Log.info("\tC02: %ld", packet->co2);
+    Log.info("\tVoltage: %ld", packet->voltage);
+    Log.info("\tCurrent: %ld", packet->current);
+    Log.info("\tWatt Hours: %ld", packet->watt_hours);
 }
