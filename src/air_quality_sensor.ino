@@ -1,12 +1,13 @@
 #include "base85.h"
-#include "DataLogger.h"
 #include "jled.h"
 #include "pb_encode.h"
 #include "PublishQueueAsyncRK.h"
 #include "RTClibrary.h"
 #include "sensor_packet.pb.h"
+#include "SimpleAckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
+#include "SQLAckTracker.h"
 
 #define READ_PERIOD_MS 60000
 #define UPLOAD_PERIOD_MS 1000
@@ -15,8 +16,8 @@
 #define LED2 D7
 #define LED3 D8
 
-// SD Card
-DataLogger logger;
+// Write data points to SD card and keep track of what has been ackowledged
+SimpleAckTracker tracker;
 
 // PM Sensor
 SPS30 pmSensor;
@@ -32,17 +33,14 @@ RTC_DS3231 rtc;
 int sequence = 0;
 
 // Global variables to keep track of state
-bool sdCardSuccess = true;
-uint32_t queueSize = 0;
+bool saveDataSucess = true;
 int resetReason = RESET_REASON_NONE;
 
 // Publishing information
 particle::Future<bool> currentPublish;
 bool currentlyPublishing = false;
 
-// LED statuses
-// LEDStatus errorLEDStatus(RGB_COLOR_RED, LED_PATTERN_SOLID, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
-// LEDStatus normaLEDStatus(RGB_COLOR_BLUE, LED_PATTERN_FADE, LED_SPEED_NORMAL, LED_PRIORITY_NORMAL);
+// LEDs
 auto bootLED = JLed(LED1);
 auto readLED = JLed(LED2);
 auto publishLED = JLed(LED3);
@@ -54,16 +52,11 @@ Timer uploadTimer(UPLOAD_PERIOD_MS, updateUploadFlag);
 bool uploadFlag = true;
 
 // Logging
-SerialLogHandler logHandler;
+SerialLogHandler logHandler(LOG_LEVEL_TRACE);
 
-// TEMPORARY
-char publishData[256];
-bool uploaded = true;
-
-// Particle System Stuff
+// Particle system stuff
 SYSTEM_THREAD(ENABLED);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
-#define VERSION 1
 
 void setup()
 {
@@ -115,26 +108,32 @@ void loop()
     if (readDataFlag)
     {
         readLED.On().Update();
-        Log.info("Reading sensors...");
+        Log.trace("Reading sensors...");
         SensorPacket packet = SensorPacket_init_zero;
         readSensors(&packet);
         printPacket(&packet);
 
-        Log.info("Putting data into a protobuf and base85 encoding...");
-        encode(&packet, publishData);
+        Log.trace("Putting data into a protobuf and base85 encoding...");
+        uint8_t *data = new uint8_t[256]; // TODO: Temporary, do not allocate on the heap
+        uint32_t length;
 
-        // TODO: Normally we would write to a file, but since we are testing, we are writing to an array
-        uploaded = false;
-
-        // Write data to SD card
-        if (true /*logger.write(packet)*/)
+        if (encode(&packet, data, &length))
         {
-            sdCardSuccess = true;
-            readLED.Off().Update();
+            tracker.add(tracker.pack(packet.timestamp, length, data));
+            if (true)
+            {
+                saveDataSucess = true;
+                readLED.Off().Update();
+            }
+            else
+            {
+                saveDataSucess = false;
+                readLED.Blink(250, 250).Forever();
+            }
         }
         else
         {
-            sdCardSuccess = false;
+            saveDataSucess = false;
             readLED.Blink(250, 250).Forever();
         }
 
@@ -147,11 +146,11 @@ void loop()
     {
         if (currentPublish.isSucceeded())
         {
-            // Update queue
-            // logger.ackData();
-            Log.info("Publication was successful!");
+            Log.trace("Publication was successful!");
+            AckTracker::Packet packet = tracker.next(); // TODO: Temporary, remove completely
+            tracker.confirmNext();
+            delete packet.data; // TODO: Temporary, remove completely
             publishLED.Off().Update();
-            uploaded = true;
         }
         else
         {
@@ -165,16 +164,13 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        // Log.info("Trying to upload data...");
-        // Log.info("\tcurrentlyPublishing: %d", currentlyPublishing);
-        // Log.info("\tParticle.connected(): %d", Particle.connected());
-        // Log.info("\tuploaded: %d", uploaded);
-        if (!currentlyPublishing && Particle.connected() /*&& logger.hasNext()*/ && !uploaded)
+        Log.trace("Trying to upload data... (%d, %d, %d)", currentlyPublishing, Particle.connected(), tracker.amount() > 0);
+        if (!currentlyPublishing && Particle.connected() && tracker.amount() > 0)
         {
-            // uint32_t data = logger.getNext();
+            AckTracker::Packet packet = tracker.next();
 
-            Log.info("Publishing data: " + String(publishData));
-            currentPublish = Particle.publish("mn/d", publishData, 60, PRIVATE, WITH_ACK);
+            Log.trace("Publishing data: " + String((char *)packet.data));
+            currentPublish = Particle.publish("mn/d", (char *)packet.data, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
         }
@@ -200,12 +196,12 @@ void readSensors(SensorPacket *packet)
     packet->has_rtc_temperature = true;
 
     uint32_t freeMem = System.freeMemory();
-    Log.info("Free memory: %ld\n", freeMem);
+    Log.trace("Free memory: %ld\n", freeMem);
 
-    packet->card_present = sdCardSuccess;
+    packet->card_present = saveDataSucess;
     packet->has_card_present = true;
 
-    packet->queue_size = queueSize;
+    packet->queue_size = tracker.amount();
     packet->has_queue_size = true;
 
     if (pmSensor.dataAvailable())
@@ -244,14 +240,9 @@ void readSensors(SensorPacket *packet)
         // Make sure to read reset reason only once
         resetReason = RESET_REASON_NONE;
     }
-
-#ifdef VERSION
-    packet->app_version = VERSION;
-    packet->has_app_version = true;
-#endif
 }
 
-bool encode(SensorPacket *in_packet, char *out)
+bool encode(SensorPacket *in_packet, uint8_t *out, uint32_t *length)
 {
     uint8_t buffer[SensorPacket_size];
     pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer) / sizeof(buffer[0]));
@@ -261,9 +252,10 @@ bool encode(SensorPacket *in_packet, char *out)
         Log.error("Unable to encode data into protobuffer");
         return false;
     }
-    Log.info("Bytes written to protobuffer: %d", stream.bytes_written);
+    Log.trace("Bytes written to protobuffer: %d", stream.bytes_written);
 
-    bintob85(publishData, buffer, stream.bytes_written);
+    char *end_ptr = bintob85((char *)out, buffer, stream.bytes_written);
+    *length = end_ptr - (char *)out;
 
     return true;
 }
@@ -280,20 +272,20 @@ void updateUploadFlag()
 
 void printPacket(SensorPacket *packet)
 {
-    Serial.printf("Packet:\n");
-    Serial.printf("\tTimestamp: %d\n", packet->timestamp);
-    Serial.printf("\tSequence: %d\n", packet->sequence);
-    Serial.printf("\tTemperature: %d\n", packet->temperature);
-    Serial.printf("\tHumidity: %d\n", packet->humidity);
-    Serial.printf("\tRTC temperature: %d\n", packet->rtc_temperature);
-    Serial.printf("\tPM1: %d\n", packet->pm1);
-    Serial.printf("\tPM2.5: %d\n", packet->pm2_5);
-    Serial.printf("\tPM4: %d\n", packet->pm4);
-    Serial.printf("\tPM10: %d\n", packet->pm10);
-    Serial.printf("\tCard present: %d\n", packet->card_present);
-    Serial.printf("\tQueue size: %d\n", packet->queue_size);
-    Serial.printf("\tC02: %d\n", packet->co2);
-    Serial.printf("\tVoltage: %d\n", packet->voltage);
-    Serial.printf("\tCurrent: %d\n", packet->current);
-    Serial.printf("\tWatt Hours: %d\n", packet->watt_hours);
+    Log.trace("Packet:\n");
+    Log.trace("\tTimestamp: %d\n", packet->timestamp);
+    Log.trace("\tSequence: %d\n", packet->sequence);
+    Log.trace("\tTemperature: %d\n", packet->temperature);
+    Log.trace("\tHumidity: %d\n", packet->humidity);
+    Log.trace("\tRTC temperature: %d\n", packet->rtc_temperature);
+    Log.trace("\tPM1: %d\n", packet->pm1);
+    Log.trace("\tPM2.5: %d\n", packet->pm2_5);
+    Log.trace("\tPM4: %d\n", packet->pm4);
+    Log.trace("\tPM10: %d\n", packet->pm10);
+    Log.trace("\tCard present: %d\n", packet->card_present);
+    Log.trace("\tQueue size: %d\n", packet->queue_size);
+    Log.trace("\tC02: %d\n", packet->co2);
+    Log.trace("\tVoltage: %d\n", packet->voltage);
+    Log.trace("\tCurrent: %d\n", packet->current);
+    Log.trace("\tWatt Hours: %d\n", packet->watt_hours);
 }
