@@ -9,7 +9,7 @@
 #include "SPS30.h"
 #include "SQLAckTracker.h"
 
-#define READ_PERIOD_MS 60000
+#define READ_PERIOD_MS 10000
 #define UPLOAD_PERIOD_MS 1000
 #define PRINT_SYS_INFO_MS 5000
 
@@ -177,7 +177,7 @@ void loop()
             AckTracker::Packet packet = tracker.next();
 
             Log.info("Publishing data: " + String((char *)packet.data));
-            currentPublish = Particle.publish("mn/d", (char *)packet.data, 60, PRIVATE, WITH_ACK);
+            currentPublish = Particle.publish("netlab/test", (char *)packet.data, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
         }
