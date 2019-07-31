@@ -55,7 +55,9 @@ bool printSystemInfoFlag = true;
 Timer printSystemInfoTimer(PRINT_SYS_INFO_MS, []() { printSystemInfoFlag = true; });
 
 // Logging
-SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}});
+Logger encodeLog("app.enocde");
+SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
+                                             {"app.enocde", LOG_LEVEL_TRACE}});
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -120,7 +122,7 @@ void loop()
 
         Log.info("Putting data into a protobuf and base85 encoding...");
         uint8_t *data = new uint8_t[256]; // TODO: Temporary, do not allocate on the heap
-        uint32_t length;
+        uint8_t length;
 
         if (encode(&packet, data, &length))
         {
@@ -250,22 +252,78 @@ void readSensors(SensorPacket *packet)
     }
 }
 
-bool encode(SensorPacket *in_packet, uint8_t *out, uint32_t *length)
+bool encode(SensorPacket *in_packet, uint8_t *out, uint8_t *length)
 {
     uint8_t buffer[SensorPacket_size];
     pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer) / sizeof(buffer[0]));
 
     if (!pb_encode(&stream, SensorPacket_fields, in_packet))
     {
-        Log.error("Unable to encode data into protobuffer");
+        encodeLog.error("Unable to encode data into protobuffer");
         return false;
     }
-    Log.trace("Bytes written to protobuffer: %d", stream.bytes_written);
+    encodeLog.trace("Bytes written to protobuffer: %d", stream.bytes_written);
 
-    char *end_ptr = bintob85((char *)out, buffer, stream.bytes_written);
-    *length = end_ptr - (char *)out;
+    removeNullsEncode(buffer, stream.bytes_written, out, length);
+    encodeLog.trace("Added bytes for encoding: %d", *length - stream.bytes_written);
+
+    if (encodeLog.isTraceEnabled())
+    {
+        for (unsigned int i = 0; i < stream.bytes_written; i++)
+        {
+            Serial.printf("%02x ", buffer[i]);
+        }
+        Serial.println();
+
+        for (unsigned int i = 0; i < *length; i++)
+        {
+            Serial.printf("%02x ", out[i]);
+        }
+        Serial.println();
+    }
 
     return true;
+}
+
+void removeNullsEncode(uint8_t *in, uint8_t in_length, uint8_t *out, uint8_t *out_length)
+{
+    uint8_t nulls[in_length];
+    uint8_t count = 0;
+
+    encodeLog.trace("Looking for 0x00 bytes...");
+    for (uint8_t i = 0; i < in_length; i++)
+    {
+        if (in[i] == 0x00)
+        {
+            encodeLog.trace("Found 0x00 byte at: %d", i);
+            nulls[count++] = i;
+        }
+    }
+    uint8_t index = 0;
+    out[index++] = count; // First byte is the number of index bytes
+
+    // Copy over all the index bytes
+    for (uint8_t i = 0; i < count; i++)
+    {
+        out[index++] = nulls[i];
+    }
+
+    // Copy input to output
+    for (uint8_t i = 0; i < in_length; i++)
+    {
+        out[index++] = in[i] == 0x00 ? in[i] + 1 : in[i];
+    }
+
+    // Add null terminator
+    out[index++] = 0x00;
+
+    *out_length = index;
+
+    encodeLog.trace("Length: %d", *out_length);
+    // for (uint8_t i = 0; i < *out_length; i++)
+    // {
+    //     encodeLog.trace("%02x", out[i]);
+    // }
 }
 
 void printSystemInfo()
