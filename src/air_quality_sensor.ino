@@ -299,7 +299,8 @@ void removeNullsEncode(uint8_t *in, uint8_t in_length, uint8_t *out, uint8_t *ou
         }
     }
     uint8_t index = 0;
-    out[index++] = count; // First byte is the number of index bytes
+    // First byte is the number of index bytes —- add one in case it was zero.
+    out[index++] = count + 1;
 
     // Copy over all the index bytes
     for (uint8_t i = 0; i < count; i++)
@@ -319,10 +320,6 @@ void removeNullsEncode(uint8_t *in, uint8_t in_length, uint8_t *out, uint8_t *ou
     *out_length = index;
 
     encodeLog.trace("Length: %d", *out_length);
-    // for (uint8_t i = 0; i < *out_length; i++)
-    // {
-    //     encodeLog.trace("%02x", out[i]);
-    // }
 }
 
 void printSystemInfo()
