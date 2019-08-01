@@ -69,7 +69,6 @@ void setup()
     resetReason = System.resetReason();
 
     Serial.begin(9600);
-    delay(3000);
 
     if (!rtc.begin())
     {
