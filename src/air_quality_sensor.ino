@@ -9,7 +9,9 @@
 
 #define READ_PERIOD_MS 10000
 #define UPLOAD_PERIOD_MS 1000
-#define PRINT_SYS_INFO_MS 5000
+#define PRINT_SYS_INFO_MS 1000000
+
+#define MAX_PUB_SIZE 600 // It is really 622
 
 #define LED1 D6
 #define LED2 D7
@@ -67,6 +69,7 @@ void setup()
     resetReason = System.resetReason();
 
     Serial.begin(9600);
+    delay(5000);
 
     if (!rtc.begin())
     {
@@ -118,7 +121,7 @@ void loop()
         printPacket(&packet);
 
         Log.info("Putting data into a protobuf and base85 encoding...");
-        uint8_t *data = new uint8_t[256]; // TODO: Temporary, do not allocate on the heap
+        uint8_t data[256];
         uint8_t length;
 
         if (encode(&packet, data, &length))
@@ -169,10 +172,8 @@ void loop()
         Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() > 0);
         if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() > 0)
         {
-            uint8_t data[255];
-            uint32_t id;
-            uint8_t length;
-            tracker.get(0, id, length, data);
+            uint8_t data[MAX_PUB_SIZE];
+            getMeasurements(data);
 
             Log.info("Publishing data: " + String((char *)data));
             currentPublish = Particle.publish("netlab/test", (char *)data, 60, PRIVATE, WITH_ACK);
@@ -193,6 +194,32 @@ void loop()
     bootLED.Update();
     readLED.Update();
     publishLED.Update();
+}
+
+void getMeasurements(uint8_t *data)
+{
+    uint32_t count = 0;
+    uint32_t total = 0;
+
+    // Figure out how many packets can fit in to buffer
+    // TODO: I'm pretty sure that count the NULL terminator even though only the last one is preserved.
+    while (total < MAX_PUB_SIZE - count && count < tracker.unconfirmedCount())
+    {
+        total += tracker.getLengthOf(count);
+        count++;
+    }
+    Log.info("Number of measurements: %ld (%ld)\n", count, total);
+
+    // Copy over data into data buffers
+    uint32_t offset = 0;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        uint32_t id;
+        uint8_t length;
+        tracker.get(i, id, length, data + offset + 1);
+        data[offset] = length - 1; // Subtract 1 because of the null terminator byte
+        offset += length - 1;
+    }
 }
 
 void readSensors(SensorPacket *packet)
