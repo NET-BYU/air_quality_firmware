@@ -6,7 +6,6 @@
 #include "SimpleAckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
-#include "SQLAckTracker.h"
 
 #define READ_PERIOD_MS 10000
 #define UPLOAD_PERIOD_MS 1000
@@ -124,7 +123,7 @@ void loop()
 
         if (encode(&packet, data, &length))
         {
-            tracker.add(tracker.pack(packet.timestamp, length, data));
+            tracker.add(packet.timestamp, length, data);
             if (true)
             {
                 saveDataSucess = true;
@@ -152,9 +151,7 @@ void loop()
         if (currentPublish.isSucceeded())
         {
             Log.info("Publication was successful!");
-            AckTracker::Packet packet = tracker.next(); // TODO: Temporary, remove completely
             tracker.confirmNext();
-            delete packet.data; // TODO: Temporary, remove completely
             publishLED.Off().Update();
         }
         else
@@ -169,13 +166,16 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.amount() > 0);
-        if (!currentlyPublishing && Particle.connected() && tracker.amount() > 0)
+        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() > 0);
+        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() > 0)
         {
-            AckTracker::Packet packet = tracker.next();
+            uint8_t data[255];
+            uint32_t id;
+            uint8_t length;
+            tracker.get(0, id, length, data);
 
-            Log.info("Publishing data: " + String((char *)packet.data));
-            currentPublish = Particle.publish("netlab/test", (char *)packet.data, 60, PRIVATE, WITH_ACK);
+            Log.info("Publishing data: " + String((char *)data));
+            currentPublish = Particle.publish("netlab/test", (char *)data, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
         }
@@ -209,7 +209,7 @@ void readSensors(SensorPacket *packet)
     packet->card_present = saveDataSucess;
     packet->has_card_present = true;
 
-    packet->queue_size = tracker.amount();
+    packet->queue_size = tracker.unconfirmedCount();
     packet->has_queue_size = true;
 
     if (pmSensor.dataAvailable())
