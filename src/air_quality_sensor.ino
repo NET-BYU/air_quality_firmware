@@ -120,12 +120,13 @@ void loop()
         readSensors(&packet);
         printPacket(&packet);
 
-        Log.info("Putting data into a protobuf and base85 encoding...");
-        uint8_t data[256];
+        Log.info("Putting data into a protobuf...");
+        uint8_t data[SensorPacket_size];
         uint8_t length;
 
-        if (encode(&packet, data, &length))
+        if (packMeasurement(&packet, SensorPacket_size, data, &length))
         {
+            Log.info("Adding data to tracker (%d)...", length);
             tracker.add(packet.timestamp, length, data);
             if (true)
             {
@@ -172,11 +173,17 @@ void loop()
         Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() > 0);
         if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() > 0)
         {
-            uint8_t data[MAX_PUB_SIZE];
-            getMeasurements(data);
+            uint32_t maxLength = MAX_PUB_SIZE - (MAX_PUB_SIZE / 4); // TODO: Should do the ceiling of the division just to be safe
+            uint8_t data[maxLength];
+            uint32_t dataLength;
+            getMeasurements(data, maxLength, &dataLength);
 
-            Log.info("Publishing data: " + String((char *)data));
-            currentPublish = Particle.publish("netlab/test", (char *)data, 60, PRIVATE, WITH_ACK);
+            uint8_t encodedData[MAX_PUB_SIZE];
+            uint32_t encodedDataLength;
+            encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
+
+            Log.info("Publishing data: " + String((char *)encodedData));
+            currentPublish = Particle.publish("netlab/test", (char *)encodedData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
         }
@@ -196,14 +203,13 @@ void loop()
     publishLED.Update();
 }
 
-void getMeasurements(uint8_t *data)
+void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length)
 {
     uint32_t count = 0;
     uint32_t total = 0;
 
     // Figure out how many measurements can fit in to buffer
-    // TODO: I'm pretty sure that count the NULL terminator even though only the last one is preserved.
-    while (total < MAX_PUB_SIZE - count && count < tracker.unconfirmedCount())
+    while (total < maxLength - count && count < tracker.unconfirmedCount())
     {
         total += tracker.getLengthOf(count);
         count++;
@@ -217,9 +223,11 @@ void getMeasurements(uint8_t *data)
         uint32_t id;
         uint8_t length;
         tracker.get(i, id, length, data + offset + 1);
-        data[offset] = length - 1; // Subtract 1 because of the null terminator byte
-        offset += length - 1;
+        data[offset] = length;
+        offset += length + 1;
     }
+
+    *length = offset;
 }
 
 void readSensors(SensorPacket *packet)
@@ -277,32 +285,37 @@ void readSensors(SensorPacket *packet)
     }
 }
 
-bool encode(SensorPacket *in_packet, uint8_t *out, uint8_t *length)
+bool packMeasurement(SensorPacket *inPacket, uint32_t inLength, uint8_t *out, uint8_t *outLength)
 {
-    uint8_t buffer[SensorPacket_size];
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer) / sizeof(buffer[0]));
+    pb_ostream_t stream = pb_ostream_from_buffer(out, inLength);
 
-    if (!pb_encode(&stream, SensorPacket_fields, in_packet))
+    if (!pb_encode(&stream, SensorPacket_fields, inPacket))
     {
         encodeLog.error("Unable to encode data into protobuffer");
         return false;
     }
+
+    *outLength = stream.bytes_written;
     encodeLog.trace("Bytes written to protobuffer: %d", stream.bytes_written);
+    return true;
+}
 
-    char *end_ptr = bintob85((char *)out, buffer, stream.bytes_written);
-    *length = end_ptr - (char *)out;
+bool encodeMeasurements(uint8_t *in, uint32_t inLength, uint8_t *out, uint32_t *outLength)
+{
+    char *end_ptr = bintob85((char *)out, in, inLength);
+    *outLength = end_ptr - (char *)out;
 
-    encodeLog.trace("Added bytes for encoding: %d", *length - stream.bytes_written);
+    encodeLog.trace("Added bytes for encoding: %ld", *outLength - inLength);
 
     if (encodeLog.isTraceEnabled())
     {
-        for (unsigned int i = 0; i < stream.bytes_written; i++)
+        for (unsigned int i = 0; i < inLength; i++)
         {
-            Serial.printf("%02x ", buffer[i]);
+            Serial.printf("%02x ", in[i]);
         }
         Serial.println();
 
-        for (unsigned int i = 0; i < *length; i++)
+        for (unsigned int i = 0; i < *outLength; i++)
         {
             Serial.printf("%02x ", out[i]);
         }
