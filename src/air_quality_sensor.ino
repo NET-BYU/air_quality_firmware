@@ -201,7 +201,7 @@ void getMeasurements(uint8_t *data)
     uint32_t count = 0;
     uint32_t total = 0;
 
-    // Figure out how many packets can fit in to buffer
+    // Figure out how many measurements can fit in to buffer
     // TODO: I'm pretty sure that count the NULL terminator even though only the last one is preserved.
     while (total < MAX_PUB_SIZE - count && count < tracker.unconfirmedCount())
     {
@@ -289,7 +289,9 @@ bool encode(SensorPacket *in_packet, uint8_t *out, uint8_t *length)
     }
     encodeLog.trace("Bytes written to protobuffer: %d", stream.bytes_written);
 
-    removeNullsEncode(buffer, stream.bytes_written, out, length);
+    char *end_ptr = bintob85((char *)out, buffer, stream.bytes_written);
+    *length = end_ptr - (char *)out;
+
     encodeLog.trace("Added bytes for encoding: %d", *length - stream.bytes_written);
 
     if (encodeLog.isTraceEnabled())
@@ -308,44 +310,6 @@ bool encode(SensorPacket *in_packet, uint8_t *out, uint8_t *length)
     }
 
     return true;
-}
-
-void removeNullsEncode(uint8_t *in, uint8_t in_length, uint8_t *out, uint8_t *out_length)
-{
-    uint8_t nulls[in_length];
-    uint8_t count = 0;
-
-    encodeLog.trace("Looking for 0x00 bytes...");
-    for (uint8_t i = 0; i < in_length; i++)
-    {
-        if (in[i] == 0x00)
-        {
-            encodeLog.trace("Found 0x00 byte at: %d", i);
-            nulls[count++] = i;
-        }
-    }
-    uint8_t index = 0;
-    // First byte is the number of index bytes —- add one in case it was zero.
-    out[index++] = count + 1;
-
-    // Copy over all the index bytes
-    for (uint8_t i = 0; i < count; i++)
-    {
-        out[index++] = nulls[i];
-    }
-
-    // Copy input to output
-    for (uint8_t i = 0; i < in_length; i++)
-    {
-        out[index++] = in[i] == 0x00 ? in[i] + 1 : in[i];
-    }
-
-    // Add null terminator
-    out[index++] = 0x00;
-
-    *out_length = index;
-
-    encodeLog.trace("Length: %d", *out_length);
 }
 
 void printSystemInfo()
