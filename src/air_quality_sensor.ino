@@ -1,7 +1,6 @@
 #include "base85.h"
 #include "jled.h"
 #include "pb_encode.h"
-#include "PublishQueueAsyncRK.h"
 #include "RTClibrary.h"
 #include "sensor_packet.pb.h"
 #include "SimpleAckTracker.h"
