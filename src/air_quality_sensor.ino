@@ -7,9 +7,9 @@
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
 
-#define READ_PERIOD_MS 10000
-#define UPLOAD_PERIOD_MS 1000
-#define PRINT_SYS_INFO_MS 1000000
+#define READ_PERIOD_MS 60000
+#define UPLOAD_PERIOD_MS (READ_PERIOD_MS * 5)
+#define PRINT_SYS_INFO_MS 10000
 
 #define MAX_PUB_SIZE 600 // It is really 622
 
