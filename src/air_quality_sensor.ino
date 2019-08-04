@@ -19,6 +19,7 @@
 
 // Write data points to SD card and keep track of what has been ackowledged
 SimpleAckTracker tracker;
+uint8_t pendingPublishes = 0;
 
 // PM Sensor
 SPS30 pmSensor;
@@ -155,7 +156,11 @@ void loop()
         if (currentPublish.isSucceeded())
         {
             Log.info("Publication was successful!");
-            tracker.confirmNext();
+            for (uint8_t i = 0; i < pendingPublishes; i++)
+            {
+                tracker.confirmNext();
+            }
+            Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
             publishLED.Off().Update();
         }
         else
@@ -164,6 +169,7 @@ void loop()
             publishLED.Blink(250, 250).Forever();
         }
 
+        pendingPublishes = 0;
         currentlyPublishing = false;
     }
 
@@ -176,14 +182,15 @@ void loop()
             uint32_t maxLength = MAX_PUB_SIZE - (MAX_PUB_SIZE / 4); // TODO: Should do the ceiling of the division just to be safe
             uint8_t data[maxLength];
             uint32_t dataLength;
-            getMeasurements(data, maxLength, &dataLength);
+            getMeasurements(data, maxLength, dataLength, pendingPublishes);
 
             uint8_t encodedData[MAX_PUB_SIZE];
             uint32_t encodedDataLength;
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
+            Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
             Log.info("Publishing data: " + String((char *)encodedData));
-            currentPublish = Particle.publish("netlab/test", (char *)encodedData, 60, PRIVATE, WITH_ACK);
+            currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
         }
@@ -203,10 +210,10 @@ void loop()
     publishLED.Update();
 }
 
-void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length)
+void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
 {
-    uint32_t count = 0;
     uint32_t total = 0;
+    count = 0;
 
     // Figure out how many measurements can fit in to buffer
     while (total < maxLength - count && count < tracker.unconfirmedCount())
@@ -214,20 +221,20 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length)
         total += tracker.getLengthOf(count);
         count++;
     }
-    Log.info("Number of measurements: %ld (%ld)\n", count, total);
+    Log.info("Number of measurements: %d (%ld)\n", count, total);
 
     // Copy over data into data buffers
     uint32_t offset = 0;
     for (uint32_t i = 0; i < count; i++)
     {
         uint32_t id;
-        uint8_t length;
-        tracker.get(i, id, length, data + offset + 1);
-        data[offset] = length;
-        offset += length + 1;
+        uint8_t item_length;
+        tracker.get(i, id, item_length, data + offset + 1);
+        data[offset] = item_length;
+        offset += item_length + 1;
     }
 
-    *length = offset;
+    length = offset;
 }
 
 void readSensors(SensorPacket *packet)
