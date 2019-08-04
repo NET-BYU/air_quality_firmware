@@ -15,6 +15,12 @@
 class PersistentAckTracker: public AckTracker
 {
     public:
+        /*
+            * Unconfirms data that was previously confirmed, placing it at the
+            * TAIL end (starting at index unconfirmedCount()).
+            * The range of id's to unconfirm is exclusive and doesn't affect
+            * the packets of data with the start_id and the end_id.
+            *  */
         virtual void unconfirm(std::uint32_t start_id, std::uint32_t end_id) = 0;
 };
 

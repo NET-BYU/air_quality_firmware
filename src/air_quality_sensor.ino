@@ -1,17 +1,17 @@
 #include "base85.h"
 #include "jled.h"
 #include "pb_encode.h"
-#include "PublishQueueAsyncRK.h"
 #include "RTClibrary.h"
 #include "sensor_packet.pb.h"
 #include "SimpleAckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
-#include "SQLAckTracker.h"
 
 #define READ_PERIOD_MS 60000
-#define UPLOAD_PERIOD_MS 1000
-#define PRINT_SYS_INFO_MS 5000
+#define UPLOAD_PERIOD_MS (READ_PERIOD_MS * 5)
+#define PRINT_SYS_INFO_MS 10000
+
+#define MAX_PUB_SIZE 600 // It is really 622
 
 #define LED1 D6
 #define LED2 D7
@@ -19,6 +19,7 @@
 
 // Write data points to SD card and keep track of what has been ackowledged
 SimpleAckTracker tracker;
+uint8_t pendingPublishes = 0;
 
 // PM Sensor
 SPS30 pmSensor;
@@ -55,7 +56,9 @@ bool printSystemInfoFlag = true;
 Timer printSystemInfoTimer(PRINT_SYS_INFO_MS, []() { printSystemInfoFlag = true; });
 
 // Logging
-SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}});
+Logger encodeLog("app.enocde");
+SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
+                                             {"app.enocde", LOG_LEVEL_TRACE}});
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -67,7 +70,7 @@ void setup()
     resetReason = System.resetReason();
 
     Serial.begin(9600);
-    delay(3000);
+    delay(5000);
 
     if (!rtc.begin())
     {
@@ -118,13 +121,14 @@ void loop()
         readSensors(&packet);
         printPacket(&packet);
 
-        Log.info("Putting data into a protobuf and base85 encoding...");
-        uint8_t *data = new uint8_t[256]; // TODO: Temporary, do not allocate on the heap
-        uint32_t length;
+        Log.info("Putting data into a protobuf...");
+        uint8_t data[SensorPacket_size];
+        uint8_t length;
 
-        if (encode(&packet, data, &length))
+        if (packMeasurement(&packet, SensorPacket_size, data, &length))
         {
-            tracker.add(tracker.pack(packet.timestamp, length, data));
+            Log.info("Adding data to tracker (%d)...", length);
+            tracker.add(packet.timestamp, length, data);
             if (true)
             {
                 saveDataSucess = true;
@@ -152,9 +156,11 @@ void loop()
         if (currentPublish.isSucceeded())
         {
             Log.info("Publication was successful!");
-            AckTracker::Packet packet = tracker.next(); // TODO: Temporary, remove completely
-            tracker.confirmNext();
-            delete packet.data; // TODO: Temporary, remove completely
+            for (uint8_t i = 0; i < pendingPublishes; i++)
+            {
+                tracker.confirmNext();
+            }
+            Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
             publishLED.Off().Update();
         }
         else
@@ -163,19 +169,28 @@ void loop()
             publishLED.Blink(250, 250).Forever();
         }
 
+        pendingPublishes = 0;
         currentlyPublishing = false;
     }
 
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.amount() > 0);
-        if (!currentlyPublishing && Particle.connected() && tracker.amount() > 0)
+        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() > 0);
+        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() > 0)
         {
-            AckTracker::Packet packet = tracker.next();
+            uint32_t maxLength = MAX_PUB_SIZE - (MAX_PUB_SIZE / 4); // TODO: Should do the ceiling of the division just to be safe
+            uint8_t data[maxLength];
+            uint32_t dataLength;
+            getMeasurements(data, maxLength, dataLength, pendingPublishes);
 
-            Log.info("Publishing data: " + String((char *)packet.data));
-            currentPublish = Particle.publish("mn/d", (char *)packet.data, 60, PRIVATE, WITH_ACK);
+            uint8_t encodedData[MAX_PUB_SIZE];
+            uint32_t encodedDataLength;
+            encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
+
+            Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
+            Log.info("Publishing data: " + String((char *)encodedData));
+            currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
         }
@@ -195,6 +210,33 @@ void loop()
     publishLED.Update();
 }
 
+void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
+{
+    uint32_t total = 0;
+    count = 0;
+
+    // Figure out how many measurements can fit in to buffer
+    while (total < maxLength - count && count < tracker.unconfirmedCount())
+    {
+        total += tracker.getLengthOf(count);
+        count++;
+    }
+    Log.info("Number of measurements: %d (%ld)\n", count, total);
+
+    // Copy over data into data buffers
+    uint32_t offset = 0;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        uint32_t id;
+        uint8_t item_length;
+        tracker.get(i, id, item_length, data + offset + 1);
+        data[offset] = item_length;
+        offset += item_length + 1;
+    }
+
+    length = offset;
+}
+
 void readSensors(SensorPacket *packet)
 {
     DateTime now = rtc.now();
@@ -209,7 +251,7 @@ void readSensors(SensorPacket *packet)
     packet->card_present = saveDataSucess;
     packet->has_card_present = true;
 
-    packet->queue_size = tracker.amount();
+    packet->queue_size = tracker.unconfirmedCount();
     packet->has_queue_size = true;
 
     if (pmSensor.dataAvailable())
@@ -250,20 +292,42 @@ void readSensors(SensorPacket *packet)
     }
 }
 
-bool encode(SensorPacket *in_packet, uint8_t *out, uint32_t *length)
+bool packMeasurement(SensorPacket *inPacket, uint32_t inLength, uint8_t *out, uint8_t *outLength)
 {
-    uint8_t buffer[SensorPacket_size];
-    pb_ostream_t stream = pb_ostream_from_buffer(buffer, sizeof(buffer) / sizeof(buffer[0]));
+    pb_ostream_t stream = pb_ostream_from_buffer(out, inLength);
 
-    if (!pb_encode(&stream, SensorPacket_fields, in_packet))
+    if (!pb_encode(&stream, SensorPacket_fields, inPacket))
     {
-        Log.error("Unable to encode data into protobuffer");
+        encodeLog.error("Unable to encode data into protobuffer");
         return false;
     }
-    Log.trace("Bytes written to protobuffer: %d", stream.bytes_written);
 
-    char *end_ptr = bintob85((char *)out, buffer, stream.bytes_written);
-    *length = end_ptr - (char *)out;
+    *outLength = stream.bytes_written;
+    encodeLog.trace("Bytes written to protobuffer: %d", stream.bytes_written);
+    return true;
+}
+
+bool encodeMeasurements(uint8_t *in, uint32_t inLength, uint8_t *out, uint32_t *outLength)
+{
+    char *end_ptr = bintob85((char *)out, in, inLength);
+    *outLength = end_ptr - (char *)out;
+
+    encodeLog.trace("Added bytes for encoding: %ld", *outLength - inLength);
+
+    if (encodeLog.isTraceEnabled())
+    {
+        for (unsigned int i = 0; i < inLength; i++)
+        {
+            Serial.printf("%02x ", in[i]);
+        }
+        Serial.println();
+
+        for (unsigned int i = 0; i < *outLength; i++)
+        {
+            Serial.printf("%02x ", out[i]);
+        }
+        Serial.println();
+    }
 
     return true;
 }
