@@ -290,6 +290,12 @@ void readSensors(SensorPacket *packet)
         // Make sure to read reset reason only once
         resetReason = RESET_REASON_NONE;
     }
+
+#if Wiring_WiFi
+    uint32_t freeMem = System.freeMemory();
+    packet->free_memory = freeMem;
+    packet->has_free_memory = true;
+#endif // Wiring_WiFi
 }
 
 bool packMeasurement(SensorPacket *inPacket, uint32_t inLength, uint8_t *out, uint8_t *outLength)
