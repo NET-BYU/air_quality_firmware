@@ -13,6 +13,8 @@
 
 #define MAX_PUB_SIZE 600 // It is really 622
 
+#define ENERGY_METER_DATA_SIZE 150
+
 #define LED1 D6
 #define LED2 D7
 #define LED3 D8
@@ -30,6 +32,10 @@ SCD30 airSensor;
 
 // RTC
 RTC_DS3231 rtc;
+
+// Energy Meter Data
+char energyMeterData[ENERGY_METER_DATA_SIZE];
+bool newEnergyMeterData = false;
 
 // Counters
 int sequence = 0;
@@ -70,6 +76,7 @@ void setup()
     resetReason = System.resetReason();
 
     Serial.begin(9600);
+    Serial1.begin(9600);
     delay(5000);
 
     if (!rtc.begin())
@@ -210,6 +217,17 @@ void loop()
     publishLED.Update();
 }
 
+void serialEvent1()
+{
+    int read = Serial1.readBytesUntil('\n', energyMeterData, ENERGY_METER_DATA_SIZE);
+
+    if (read != 0)
+    {
+        Log.info("%s\n", energyMeterData);
+        newEnergyMeterData = true;
+    }
+}
+
 void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
 {
     uint32_t total = 0;
@@ -280,6 +298,20 @@ void readSensors(SensorPacket *packet)
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
+    }
+
+    if (newEnergyMeterData)
+    {
+        packet->current = 0;
+        packet->has_current = true;
+
+        packet->voltage = 0;
+        packet->has_voltage = true;
+
+        packet->watt_hours = 0;
+        packet->has_watt_hours = true;
+
+        newEnergyMeterData = false;
     }
 
     if (resetReason != RESET_REASON_NONE)
