@@ -1,3 +1,4 @@
+#include "ArduinoJson.h"
 #include "base85.h"
 #include "jled.h"
 #include "pb_encode.h"
@@ -302,14 +303,25 @@ void readSensors(SensorPacket *packet)
 
     if (newEnergyMeterData)
     {
-        packet->current = 0;
-        packet->has_current = true;
+        StaticJsonDocument<ENERGY_METER_DATA_SIZE> doc;
+        DeserializationError error = deserializeJson(doc, energyMeterData);
 
-        packet->voltage = 0;
-        packet->has_voltage = true;
+        if (error)
+        {
+            Log.warn("Unable to parse JSON...");
+            Log.warn(error.c_str());
+        }
+        else
+        {
+            packet->current = doc["emeter"]["get_realtime"]["current"];
+            packet->has_current = true;
 
-        packet->watt_hours = 0;
-        packet->has_watt_hours = true;
+            packet->voltage = doc["emeter"]["get_realtime"]["voltage"];
+            packet->has_voltage = true;
+
+            packet->watt_hours = doc["emeter"]["get_realtime"]["power"];
+            packet->has_watt_hours = true;
+        }
 
         newEnergyMeterData = false;
     }
