@@ -44,8 +44,8 @@ typedef struct _SensorPacket {
     int32_t voltage;
     bool has_current;
     int32_t current;
-    bool has_watt_hours;
-    int32_t watt_hours;
+    bool has_total_energy;
+    int32_t total_energy;
     bool has_reset_reason;
     int32_t reset_reason;
     bool has_free_memory;
@@ -74,7 +74,7 @@ typedef struct _SensorPacket {
 #define SensorPacket_co2_tag                     16
 #define SensorPacket_voltage_tag                 17
 #define SensorPacket_current_tag                 18
-#define SensorPacket_watt_hours_tag              19
+#define SensorPacket_total_energy_tag            19
 #define SensorPacket_reset_reason_tag            20
 #define SensorPacket_free_memory_tag             21
 
@@ -95,7 +95,7 @@ X(a, STATIC, OPTIONAL, INT32, app_version, 12) \
 X(a, STATIC, OPTIONAL, INT32, co2, 16) \
 X(a, STATIC, OPTIONAL, INT32, voltage, 17) \
 X(a, STATIC, OPTIONAL, INT32, current, 18) \
-X(a, STATIC, OPTIONAL, INT32, watt_hours, 19) \
+X(a, STATIC, OPTIONAL, INT32, total_energy, 19) \
 X(a, STATIC, OPTIONAL, INT32, reset_reason, 20) \
 X(a, STATIC, OPTIONAL, INT32, free_memory, 21)
 #define SensorPacket_CALLBACK NULL

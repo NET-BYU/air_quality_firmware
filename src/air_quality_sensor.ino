@@ -65,8 +65,9 @@ Timer printSystemInfoTimer(PRINT_SYS_INFO_MS, []() { printSystemInfoFlag = true;
 
 // Logging
 Logger encodeLog("app.enocde");
+Logger serialLog("app.serial");
 SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
-                                             {"app.enocde", LOG_LEVEL_TRACE}});
+                                             {"app.enocde", LOG_LEVEL_INFO}});
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -232,12 +233,12 @@ void loop()
 
 void serialEvent1()
 {
-    Log.info("SerialEvent1!");
+    serialLog.info("SerialEvent1!");
     int read = Serial1.readBytesUntil('\n', energyMeterData, ENERGY_METER_DATA_SIZE);
 
     if (read != 0)
     {
-        Log.info("Energy meter data: %s\n", energyMeterData);
+        serialLog.info("Energy meter data: %s\n", energyMeterData);
         newEnergyMeterData = true;
     }
 }
@@ -344,8 +345,8 @@ void readSensors(SensorPacket *packet)
             packet->voltage = doc["emeter"]["get_realtime"]["voltage"];
             packet->has_voltage = true;
 
-            packet->watt_hours = doc["emeter"]["get_realtime"]["power"];
-            packet->has_watt_hours = true;
+            packet->total_energy = doc["emeter"]["get_realtime"]["total"];
+            packet->has_total_energy = true;
         }
 
         newEnergyMeterData = false;
@@ -493,9 +494,9 @@ void printPacket(SensorPacket *packet)
         Log.info("\tCurrent: %ld", packet->current);
     }
 
-    if (packet->has_watt_hours)
+    if (packet->has_total_energy)
     {
-        Log.info("\tWatt Hours: %ld", packet->watt_hours);
+        Log.info("\tWatt Hours: %ld", packet->total_energy);
     }
 
     if (packet->has_free_memory)
