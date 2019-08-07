@@ -95,7 +95,8 @@ void setup()
     uint32_t first = rtc.now().unixtime();
     delay(1000);
     uint32_t second = rtc.now().unixtime();
-    if (first == second) {
+    if (first == second)
+    {
         Log.error("Could not start RTC!");
         success = false;
         rtcPresent = false;
