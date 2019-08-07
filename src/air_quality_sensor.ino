@@ -60,6 +60,8 @@ bool readDataFlag = true;
 Timer readTimer(READ_PERIOD_MS, []() { readDataFlag = true; });
 bool uploadFlag = true;
 Timer uploadTimer(UPLOAD_PERIOD_MS, []() { uploadFlag = true; });
+
+bool enablePrintSystemInfo = false;
 bool printSystemInfoFlag = true;
 Timer printSystemInfoTimer(PRINT_SYS_INFO_MS, []() { printSystemInfoFlag = true; });
 
@@ -128,7 +130,11 @@ void setup()
     // Start timers
     readTimer.start();
     uploadTimer.start();
-    printSystemInfoTimer.start();
+
+    if (enablePrintSystemInfo)
+    {
+        printSystemInfoTimer.start();
+    }
 }
 
 void loop()
