@@ -280,7 +280,6 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
 void readSensors(SensorPacket *packet)
 {
     uint32_t timestamp;
-    Log.info("RTC present: %d", rtcPresent);
     if (rtcPresent)
     {
         DateTime now = rtc.now();
