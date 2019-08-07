@@ -346,13 +346,16 @@ void readSensors(SensorPacket *packet)
         }
         else
         {
-            packet->current = doc["emeter"]["get_realtime"]["current"];
+            packet->current = doc["emeter"]["get_realtime"]["current"] * 1000;
             packet->has_current = true;
 
-            packet->voltage = doc["emeter"]["get_realtime"]["voltage"];
+            packet->voltage = doc["emeter"]["get_realtime"]["voltage"] * 10;
             packet->has_voltage = true;
 
-            packet->total_energy = doc["emeter"]["get_realtime"]["total"];
+            packet->power = doc["emeter"]["get_realtime"]["power"] * 1000;
+            packet->has_power = true;
+
+            packet->total_energy = doc["emeter"]["get_realtime"]["total"] * 1000;
             packet->has_total_energy = true;
         }
 

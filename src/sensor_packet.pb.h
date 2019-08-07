@@ -50,13 +50,15 @@ typedef struct _SensorPacket {
     int32_t reset_reason;
     bool has_free_memory;
     int32_t free_memory;
+    bool has_power;
+    int32_t power;
 /* @@protoc_insertion_point(struct:SensorPacket) */
 } SensorPacket;
 
 
 /* Initializer values for message structs */
-#define SensorPacket_init_default                {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
-#define SensorPacket_init_zero                   {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define SensorPacket_init_default                {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
+#define SensorPacket_init_zero                   {0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define SensorPacket_timestamp_tag               1
@@ -74,6 +76,7 @@ typedef struct _SensorPacket {
 #define SensorPacket_co2_tag                     16
 #define SensorPacket_voltage_tag                 17
 #define SensorPacket_current_tag                 18
+#define SensorPacket_power_tag                   22
 #define SensorPacket_total_energy_tag            19
 #define SensorPacket_reset_reason_tag            20
 #define SensorPacket_free_memory_tag             21
@@ -97,7 +100,8 @@ X(a, STATIC, OPTIONAL, INT32, voltage, 17) \
 X(a, STATIC, OPTIONAL, INT32, current, 18) \
 X(a, STATIC, OPTIONAL, INT32, total_energy, 19) \
 X(a, STATIC, OPTIONAL, INT32, reset_reason, 20) \
-X(a, STATIC, OPTIONAL, INT32, free_memory, 21)
+X(a, STATIC, OPTIONAL, INT32, free_memory, 21) \
+X(a, STATIC, OPTIONAL, INT32, power, 22)
 #define SensorPacket_CALLBACK NULL
 #define SensorPacket_DEFAULT NULL
 
@@ -107,7 +111,7 @@ extern const pb_msgdesc_t SensorPacket_msg;
 #define SensorPacket_fields &SensorPacket_msg
 
 /* Maximum encoded size of messages (where known) */
-#define SensorPacket_size                        185
+#define SensorPacket_size                        197
 
 #ifdef __cplusplus
 } /* extern "C" */
