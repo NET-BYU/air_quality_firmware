@@ -1,4 +1,3 @@
-#include "ArduinoJson.h"
 #include "base85.h"
 #include "jled.h"
 #include "pb_encode.h"
@@ -7,6 +6,7 @@
 #include "SimpleAckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
+#include "ArduinoJson.h"
 
 #define READ_PERIOD_MS 60000
 #define UPLOAD_PERIOD_MS (READ_PERIOD_MS * 5)
@@ -33,6 +33,7 @@ SCD30 airSensor;
 
 // RTC
 RTC_DS3231 rtc;
+bool rtcPresent = true;
 
 // Energy Meter Data
 char energyMeterData[ENERGY_METER_DATA_SIZE];
@@ -77,13 +78,24 @@ void setup()
     resetReason = System.resetReason();
 
     Serial.begin(9600);
-    Serial1.begin(9600);
+    Serial1.begin(115200);
     delay(5000);
 
     if (!rtc.begin())
     {
         Log.error("Could not start RTC!");
         success = false;
+        rtcPresent = false;
+    }
+
+    // Make sure RTC is really working
+    uint32_t first = rtc.now().unixtime();
+    delay(1000);
+    uint32_t second = rtc.now().unixtime();
+    if (first == second) {
+        Log.error("Could not start RTC!");
+        success = false;
+        rtcPresent = false;
     }
 
     if (!pmSensor.begin())
@@ -220,11 +232,12 @@ void loop()
 
 void serialEvent1()
 {
+    Log.info("SerialEvent1!");
     int read = Serial1.readBytesUntil('\n', energyMeterData, ENERGY_METER_DATA_SIZE);
 
     if (read != 0)
     {
-        Log.info("%s\n", energyMeterData);
+        Log.info("Energy meter data: %s\n", energyMeterData);
         newEnergyMeterData = true;
     }
 }
@@ -258,14 +271,26 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
 
 void readSensors(SensorPacket *packet)
 {
-    DateTime now = rtc.now();
-    packet->timestamp = now.unixtime();
+    uint32_t timestamp;
+    Log.info("RTC present: %d", rtcPresent);
+    if (rtcPresent)
+    {
+        DateTime now = rtc.now();
+        timestamp = now.unixtime();
+    }
+    else
+    {
+        timestamp = Time.now();
+    }
+    packet->timestamp = timestamp;
 
     packet->sequence = sequence;
 
-    int32_t rtcTemperature = rtc.getTemperature();
-    packet->rtc_temperature = rtcTemperature;
-    packet->has_rtc_temperature = true;
+    if (rtcPresent)
+    {
+        packet->rtc_temperature = rtc.getTemperature();
+        packet->has_rtc_temperature = true;
+    }
 
     packet->card_present = saveDataSucess;
     packet->has_card_present = true;
@@ -407,17 +432,79 @@ void printPacket(SensorPacket *packet)
     Log.info("Packet:");
     Log.info("\tTimestamp: %ld", packet->timestamp);
     Log.info("\tSequence: %ld", packet->sequence);
-    Log.info("\tTemperature: %ld", packet->temperature);
-    Log.info("\tHumidity: %ld", packet->humidity);
-    Log.info("\tRTC temperature: %ld", packet->rtc_temperature);
-    Log.info("\tPM1: %ld", packet->pm1);
-    Log.info("\tPM2.5: %ld", packet->pm2_5);
-    Log.info("\tPM4: %ld", packet->pm4);
-    Log.info("\tPM10: %ld", packet->pm10);
-    Log.info("\tCard present: %d", packet->card_present);
-    Log.info("\tQueue size: %ld", packet->queue_size);
-    Log.info("\tC02: %ld", packet->co2);
-    Log.info("\tVoltage: %ld", packet->voltage);
-    Log.info("\tCurrent: %ld", packet->current);
-    Log.info("\tWatt Hours: %ld", packet->watt_hours);
+
+    if (packet->has_temperature)
+    {
+        Log.info("\tTemperature: %ld", packet->temperature);
+    }
+
+    if (packet->has_temperature)
+    {
+        Log.info("\tHumidity: %ld", packet->humidity);
+    }
+
+    if (packet->has_rtc_temperature)
+    {
+        Log.info("\tRTC temperature: %ld", packet->rtc_temperature);
+    }
+
+    if (packet->has_pm1)
+    {
+        Log.info("\tPM1: %ld", packet->pm1);
+    }
+
+    if (packet->has_pm2_5)
+    {
+        Log.info("\tPM2.5: %ld", packet->pm2_5);
+    }
+
+    if (packet->has_pm4)
+    {
+        Log.info("\tPM4: %ld", packet->pm4);
+    }
+
+    if (packet->has_pm10)
+    {
+        Log.info("\tPM10: %ld", packet->pm10);
+    }
+
+    if (packet->has_card_present)
+    {
+        Log.info("\tCard present: %d", packet->card_present);
+    }
+
+    if (packet->has_queue_size)
+    {
+        Log.info("\tQueue size: %ld", packet->queue_size);
+    }
+
+    if (packet->has_co2)
+    {
+        Log.info("\tC02: %ld", packet->co2);
+    }
+
+    if (packet->has_voltage)
+    {
+        Log.info("\tVoltage: %ld", packet->voltage);
+    }
+
+    if (packet->has_current)
+    {
+        Log.info("\tCurrent: %ld", packet->current);
+    }
+
+    if (packet->has_watt_hours)
+    {
+        Log.info("\tWatt Hours: %ld", packet->watt_hours);
+    }
+
+    if (packet->has_free_memory)
+    {
+        Log.info("\tFree Memory: %ld", packet->free_memory);
+    }
+
+    if (packet->has_reset_reason)
+    {
+        Log.info("\tReset Reason: %ld", packet->reset_reason);
+    }
 }
