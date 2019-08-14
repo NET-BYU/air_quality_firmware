@@ -14,7 +14,7 @@
 
 #define MAX_PUB_SIZE 600 // It is really 622
 
-#define ENERGY_METER_DATA_SIZE 150
+#define ENERGY_METER_DATA_SIZE 200
 
 #define LED1 D6
 #define LED2 D7
@@ -80,8 +80,12 @@ void setup()
     bool success = true;
     resetReason = System.resetReason();
 
+    // Debugging port
     Serial.begin(9600);
+
+    // Energy meter port
     Serial1.begin(115200);
+
     delay(5000);
 
     if (!rtc.begin())
@@ -241,13 +245,9 @@ void loop()
 void serialEvent1()
 {
     serialLog.info("SerialEvent1!");
-    int read = Serial1.readBytesUntil('\n', energyMeterData, ENERGY_METER_DATA_SIZE);
-
-    if (read != 0)
-    {
-        serialLog.info("Energy meter data: %s\n", energyMeterData);
-        newEnergyMeterData = true;
-    }
+    Serial1.readBytes(energyMeterData, ENERGY_METER_DATA_SIZE);
+    serialLog.info("Energy meter data: %s\n", energyMeterData);
+    newEnergyMeterData = true;
 }
 
 void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
@@ -299,8 +299,8 @@ void readSensors(SensorPacket *packet)
         packet->has_rtc_temperature = true;
     }
 
-    packet->card_present = saveDataSucess;
-    packet->has_card_present = true;
+    // packet->card_present = saveDataSucess;
+    // packet->has_card_present = true;
 
     packet->queue_size = tracker.unconfirmedCount();
     packet->has_queue_size = true;
@@ -345,17 +345,26 @@ void readSensors(SensorPacket *packet)
         }
         else
         {
-            packet->current = doc["StatusSNS"]["ENERGY"]["Current"] * 1000;
+            packet->current = (float)doc["c"] * 1000;
             packet->has_current = true;
 
-            packet->voltage = doc["StatusSNS"]["ENERGY"]["Voltage"] * 10;
+            packet->voltage = doc["v"];
             packet->has_voltage = true;
 
-            packet->power = doc["StatusSNS"]["ENERGY"]["Power"] * 1000;
+            packet->total_energy = (float)doc["t"] * 1000;
+            packet->has_total_energy = true;
+
+            packet->power = doc["p"];
             packet->has_power = true;
 
-            packet->total_energy = doc["StatusSNS"]["ENERGY"]["Total"] * 1000;
-            packet->has_total_energy = true;
+            packet->apparent_power = doc["a"];
+            packet->has_apparent_power = true;
+
+            packet->reactive_power = doc["r"];
+            packet->has_reactive_power = true;
+
+            packet->power_factor = (float)doc["f"] * 100;
+            packet->has_power_factor = true;
         }
 
         newEnergyMeterData = false;
@@ -505,7 +514,27 @@ void printPacket(SensorPacket *packet)
 
     if (packet->has_total_energy)
     {
-        Log.info("\tWatt Hours: %ld", packet->total_energy);
+        Log.info("\tTotal energy: %ld", packet->total_energy);
+    }
+
+    if (packet->has_power)
+    {
+        Log.info("\tPower: %ld", packet->power);
+    }
+
+    if (packet->has_apparent_power)
+    {
+        Log.info("\tApparent power: %ld", packet->apparent_power);
+    }
+
+    if (packet->has_reactive_power)
+    {
+        Log.info("\tReactive power: %ld", packet->reactive_power);
+    }
+
+    if (packet->has_power_factor)
+    {
+        Log.info("\tPower factor: %ld", packet->power_factor);
     }
 
     if (packet->has_free_memory)

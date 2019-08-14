@@ -1,3 +1,4 @@
 target
 src/air_quality_sensor.cpp
 .vscode
+.cquery_cache
