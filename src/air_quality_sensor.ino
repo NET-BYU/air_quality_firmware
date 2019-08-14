@@ -9,7 +9,8 @@
 #include "ArduinoJson.h"
 
 #define READ_PERIOD_MS 60000
-#define UPLOAD_PERIOD_MS (READ_PERIOD_MS * 5)
+#define UPLOAD_PERIOD_MS 1000
+#define UPLOAD_BATCH_SIZE 1
 #define PRINT_SYS_INFO_MS 10000
 
 #define MAX_PUB_SIZE 600 // It is really 622
@@ -208,8 +209,8 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() > 0);
-        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() > 0)
+        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() >= UPLOAD_BATCH_SIZE);
+        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= UPLOAD_BATCH_SIZE)
         {
             uint32_t maxLength = MAX_PUB_SIZE - (MAX_PUB_SIZE / 4); // TODO: Should do the ceiling of the division just to be safe
             uint8_t data[maxLength];
