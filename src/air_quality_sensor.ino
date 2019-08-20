@@ -62,6 +62,12 @@ Timer readTimer(READ_PERIOD_MS, []() { readDataFlag = true; });
 bool uploadFlag = true;
 Timer uploadTimer(UPLOAD_PERIOD_MS, []() { uploadFlag = true; });
 
+// Remote reset variables
+#define DELAY_BEFORE_REBOOT 2000
+unsigned long rebootSync = millis();
+bool resetFlag = false;
+
+// Print system information variables
 bool enablePrintSystemInfo = false;
 bool printSystemInfoFlag = true;
 Timer printSystemInfoTimer(PRINT_SYS_INFO_MS, []() { printSystemInfoFlag = true; });
@@ -80,6 +86,9 @@ void setup()
 {
     bool success = true;
     resetReason = System.resetReason();
+
+    // Set up cloud functions
+    Particle.function("reset", cloudReset);
 
     // Debugging port
     Serial.begin(9600);
@@ -229,6 +238,11 @@ void loop()
         }
 
         uploadFlag = false;
+    }
+
+    //  Remote Reset Function
+    if (resetFlag && (millis() - rebootSync >=  DELAY_BEFORE_REBOOT)) {
+        System.reset();
     }
 
     if (printSystemInfoFlag)
@@ -425,6 +439,12 @@ bool encodeMeasurements(uint8_t *in, uint32_t inLength, uint8_t *out, uint32_t *
     }
 
     return true;
+}
+
+int cloudReset(String arg) {
+    resetFlag = true;
+    rebootSync = millis();
+    return 0;
 }
 
 void printSystemInfo()
