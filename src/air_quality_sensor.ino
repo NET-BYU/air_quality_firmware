@@ -89,6 +89,7 @@ void setup()
     // Set up cloud functions
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
+    Particle.function("unack", cloudUnackMeasurement);
 
     // Debugging port
     Serial.begin(9600);
@@ -464,6 +465,12 @@ int cloudResetCoprocessor(String arg)
 {
     Serial.println("Cloud reset coprocessor called...");
     resetCoprocessor();
+    return 0;
+}
+
+int cloudUnackMeasurement(String arg)
+{
+    // TODO: Put code here...
     return 0;
 }
 
