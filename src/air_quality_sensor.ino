@@ -15,7 +15,7 @@
 
 #define MAX_PUB_SIZE 600 // It is really 622
 
-#define ENERGY_METER_DATA_SIZE 200
+
 
 #define LED1 D6
 #define LED2 D7
@@ -37,6 +37,7 @@ RTC_DS3231 rtc;
 bool rtcPresent = true;
 
 // Energy Meter Data
+#define ENERGY_METER_DATA_SIZE 200
 char energyMeterData[ENERGY_METER_DATA_SIZE];
 bool newEnergyMeterData = false;
 
@@ -442,6 +443,7 @@ bool encodeMeasurements(uint8_t *in, uint32_t inLength, uint8_t *out, uint32_t *
 }
 
 int cloudReset(String arg) {
+    Serial.println("Cloud reset called...");
     resetFlag = true;
     rebootSync = millis();
     return 0;
