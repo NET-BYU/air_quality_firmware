@@ -243,6 +243,9 @@ void loop()
 
     //  Remote Reset Function
     if (resetFlag && (millis() - rebootSync >=  DELAY_BEFORE_REBOOT)) {
+        Serial.println("Rebooting...");
+        Serial1.printf("reset");
+        Serial1.flush();
         System.reset();
     }
 
