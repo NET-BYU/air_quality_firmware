@@ -15,8 +15,6 @@
 
 #define MAX_PUB_SIZE 600 // It is really 622
 
-
-
 #define LED1 D6
 #define LED2 D7
 #define LED3 D8
@@ -90,6 +88,7 @@ void setup()
 
     // Set up cloud functions
     Particle.function("reset", cloudReset);
+    Particle.function("resetCo", cloudResetCoprocessor);
 
     // Debugging port
     Serial.begin(9600);
@@ -242,10 +241,12 @@ void loop()
     }
 
     //  Remote Reset Function
-    if (resetFlag && (millis() - rebootSync >=  DELAY_BEFORE_REBOOT)) {
-        Serial.println("Rebooting...");
-        Serial1.printf("reset");
-        Serial1.flush();
+    if (resetFlag && (millis() - rebootSync >= DELAY_BEFORE_REBOOT))
+    {
+        Serial.println("Rebooting coprocessor...");
+        resetCoprocessor();
+
+        Serial.println("Rebooting myself...");
         System.reset();
     }
 
@@ -445,10 +446,24 @@ bool encodeMeasurements(uint8_t *in, uint32_t inLength, uint8_t *out, uint32_t *
     return true;
 }
 
-int cloudReset(String arg) {
+void resetCoprocessor()
+{
+    Serial1.printf("reset");
+    Serial1.flush();
+}
+
+int cloudReset(String arg)
+{
     Serial.println("Cloud reset called...");
     resetFlag = true;
     rebootSync = millis();
+    return 0;
+}
+
+int cloudResetCoprocessor(String arg)
+{
+    Serial.println("Cloud reset coprocessor called...");
+    resetCoprocessor();
     return 0;
 }
 
