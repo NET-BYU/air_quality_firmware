@@ -7,6 +7,7 @@
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
 #include "ArduinoJson.h"
+#include "PersistentCounter.h"
 
 #define READ_PERIOD_MS 60000
 #define UPLOAD_PERIOD_MS 1000
@@ -40,7 +41,8 @@ char energyMeterData[ENERGY_METER_DATA_SIZE];
 bool newEnergyMeterData = false;
 
 // Counters
-int sequence = 0;
+#define SEQUENCE_COUNT_ADDRESS 0x00
+PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
 
 // Global variables to keep track of state
 bool saveDataSucess = true;
@@ -184,7 +186,7 @@ void loop()
             readLED.Blink(250, 250).Forever();
         }
 
-        sequence++;
+        sequence.increment();
         readDataFlag = false;
     }
 
@@ -307,7 +309,7 @@ void readSensors(SensorPacket *packet)
     }
     packet->timestamp = timestamp;
 
-    packet->sequence = sequence;
+    packet->sequence = sequence.get();
 
     if (rtcPresent)
     {
