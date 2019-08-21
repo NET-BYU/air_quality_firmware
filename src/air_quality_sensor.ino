@@ -15,9 +15,9 @@
 
 #define MAX_PUB_SIZE 600 // It is really 622
 
-#define LED1 D6
-#define LED2 D7
-#define LED3 D8
+#define BOOT_LED D3
+#define READ_LED D4
+#define PUBLISH_LED D5
 
 // Write data points to SD card and keep track of what has been ackowledged
 SimpleAckTracker tracker;
@@ -51,9 +51,9 @@ particle::Future<bool> currentPublish;
 bool currentlyPublishing = false;
 
 // LEDs
-auto bootLED = JLed(LED1);
-auto readLED = JLed(LED2);
-auto publishLED = JLed(LED3);
+auto bootLED = JLed(BOOT_LED);
+auto readLED = JLed(READ_LED);
+auto publishLED = JLed(PUBLISH_LED);
 
 // Timers
 bool readDataFlag = true;
@@ -128,11 +128,6 @@ void setup()
         Log.error("Could not start CO2 sensor!");
         success = false;
     }
-
-    // Set up LEDs
-    pinMode(LED1, OUTPUT);
-    pinMode(LED2, OUTPUT);
-    pinMode(LED3, OUTPUT);
 
     if (!success)
     {
