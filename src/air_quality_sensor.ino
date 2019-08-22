@@ -11,7 +11,7 @@
 
 #define READ_PERIOD_MS 60000
 #define UPLOAD_PERIOD_MS 1000
-#define UPLOAD_BATCH_SIZE 1
+#define DEFAULT_UPLOAD_BATCH_SIZE 1
 #define PRINT_SYS_INFO_MS 10000
 
 #define MAX_PUB_SIZE 600 // It is really 622
@@ -29,6 +29,9 @@ PRODUCT_VERSION(1);
 PRODUCT_ID(9861);
 PRODUCT_VERSION(1);
 #endif
+
+// Operation parameters
+uint16_t uploadBatchSize = DEFAULT_UPLOAD_BATCH_SIZE;
 
 // Write data points to SD card and keep track of what has been ackowledged
 SimpleAckTracker tracker;
@@ -102,6 +105,7 @@ void setup()
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
     Particle.function("unack", cloudUnackMeasurement);
+    Particle.function("setParam", cloudSetParameter);
 
     // Debugging port
     Serial.begin(9600);
@@ -226,8 +230,8 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() >= UPLOAD_BATCH_SIZE);
-        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= UPLOAD_BATCH_SIZE)
+        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() >= DEFAULT_UPLOAD_BATCH_SIZE);
+        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= DEFAULT_UPLOAD_BATCH_SIZE)
         {
             uint32_t maxLength = MAX_PUB_SIZE - (MAX_PUB_SIZE / 4); // TODO: Should do the ceiling of the division just to be safe
             uint8_t data[maxLength];
@@ -479,6 +483,42 @@ int cloudUnackMeasurement(String arg)
 {
     // TODO: Put code here...
     return 0;
+}
+
+int cloudSetParameter(String arg)
+{
+    const char *argStr = arg.c_str();
+    char *loc = strchr(argStr, '|');
+
+    if (loc == NULL)
+    {
+        Log.error("Incorrect format for set paramter: %s", argStr);
+        return -1;
+    }
+
+    const char *command = argStr;
+    const char *valueStr = loc + 1; // Skip sentinal character
+    int size = loc - command;
+
+    // Parse value
+    int value = atoi(valueStr);
+    if (value == 0)
+    {
+        Log.error("Unable to parse value: %s", argStr);
+        return -1;
+    }
+
+    // Match command
+    if (strncmp(command, "batchSize", size) == 0)
+    {
+        uploadBatchSize = value;
+        return 0;
+    }
+    else
+    {
+        Log.error("No matching command: %s", argStr);
+        return -1;
+    }
 }
 
 void printSystemInfo()
