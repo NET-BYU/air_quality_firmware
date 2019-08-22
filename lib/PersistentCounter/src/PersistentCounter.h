@@ -8,14 +8,15 @@ class PersistentCounter
 {
 public:
     PersistentCounter(uint32_t address);
-    void set(uint32_t value);
     uint32_t get();
     void increment();
 
 private:
-    uint32_t count;
-    uint32_t address;
+    void set(uint32_t value);
+
     Logger log;
+    uint32_t address;
+    uint32_t count;
 };
 
 #endif
