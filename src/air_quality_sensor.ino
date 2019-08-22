@@ -20,6 +20,16 @@
 #define READ_LED D4
 #define PUBLISH_LED D5
 
+#if PLATFORM_ID == PLATFORM_ARGON
+PRODUCT_ID(9901);
+PRODUCT_VERSION(1);
+#endif
+
+#if PLATFORM_ID == PLATFORM_BORON
+PRODUCT_ID(9861);
+PRODUCT_VERSION(1);
+#endif
+
 // Write data points to SD card and keep track of what has been ackowledged
 SimpleAckTracker tracker;
 uint8_t pendingPublishes = 0;
