@@ -505,17 +505,79 @@ int cloudSetParameter(String arg)
     }
 
     // Match command
-    if (strncmp(command, "batchSize", size) == 0)
+    if (strncmp(command, "readPeriodMs", size) == 0)
     {
-        config.data.uploadBatchSize = value;
+        Log.info("Updating readPeriodMs (%d)", value);
+        config.data.readPeriodMs = value;
         config.save();
+        config.print();
         return 0;
     }
-    else
+
+    if (strncmp(command, "uploadPeriodMs", size) == 0)
     {
-        Log.error("No matching command: %s", argStr);
-        return -1;
+        Log.info("Updating uploadPeriodMs (%d)", value);
+        config.data.uploadPeriodMs = value;
+        config.save();
+        config.print();
+        return 0;
     }
+
+    if (strncmp(command, "printSysInfoMs", size) == 0)
+    {
+        Log.info("Updating printSysInfoMs (%d)", value);
+        config.data.printSysInfoMs = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "enablePrintSystemInfo", size) == 0)
+    {
+        Log.info("Updating enablePrintSystemInfo (%d)", value);
+        config.data.enablePrintSystemInfo = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "uploadBatchSize", size) == 0)
+    {
+        Log.info("Updating uploadBatchSize (%d)", value);
+        config.data.uploadBatchSize = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "maxPubSize", size) == 0)
+    {
+        Log.info("Updating maxPubSize (%d)", value);
+        config.data.maxPubSize = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "delayBeforeReboot", size) == 0)
+    {
+        Log.info("Updating delayBeforeReboot (%d)", value);
+        config.data.delayBeforeReboot = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "reset", size) == 0)
+    {
+        Log.info("Restting configuration");
+        config.reset();
+        config.print();
+        return 0;
+    }
+
+    Log.error("No matching command: %s", argStr);
+    return -1;
 }
 
 void printSystemInfo()
