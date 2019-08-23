@@ -8,14 +8,7 @@
 #include "SPS30.h"
 #include "ArduinoJson.h"
 #include "PersistentCounter.h"
-// #include "PersistentConfig.h"
-
-#define READ_PERIOD_MS 60000
-#define UPLOAD_PERIOD_MS 1000
-#define DEFAULT_UPLOAD_BATCH_SIZE 1
-#define PRINT_SYS_INFO_MS 10000
-
-#define MAX_PUB_SIZE 600 // It is really 622
+#include "PersistentConfig.h"
 
 #define BOOT_LED D3
 #define READ_LED D4
@@ -31,10 +24,8 @@ PRODUCT_ID(9861);
 PRODUCT_VERSION(1);
 #endif
 
-// PersistentConfig config;
-
-// Operation parameters
-uint16_t uploadBatchSize = DEFAULT_UPLOAD_BATCH_SIZE;
+#define CONFIG_ADDRESS 0x04
+PersistentConfig config(CONFIG_ADDRESS);
 
 // Write data points to SD card and keep track of what has been ackowledged
 SimpleAckTracker tracker;
@@ -75,9 +66,9 @@ auto publishLED = JLed(PUBLISH_LED);
 
 // Timers
 bool readDataFlag = true;
-Timer readTimer(READ_PERIOD_MS, []() { readDataFlag = true; });
+Timer readTimer(config.data.readPeriodMs, []() { readDataFlag = true; });
 bool uploadFlag = true;
-Timer uploadTimer(UPLOAD_PERIOD_MS, []() { uploadFlag = true; });
+Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });
 
 // Remote reset variables
 #define DELAY_BEFORE_REBOOT 2000
@@ -87,7 +78,7 @@ bool resetFlag = false;
 // Print system information variables
 bool enablePrintSystemInfo = false;
 bool printSystemInfoFlag = true;
-Timer printSystemInfoTimer(PRINT_SYS_INFO_MS, []() { printSystemInfoFlag = true; });
+Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
 
 // Logging
 Logger encodeLog("app.enocde");
@@ -233,15 +224,15 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() >= DEFAULT_UPLOAD_BATCH_SIZE);
-        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= DEFAULT_UPLOAD_BATCH_SIZE)
+        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() >= config.data.maxPubSize);
+        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= config.data.maxPubSize)
         {
-            uint32_t maxLength = MAX_PUB_SIZE - (MAX_PUB_SIZE / 4); // TODO: Should do the ceiling of the division just to be safe
+            uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // TODO: Should do the ceiling of the division just to be safe
             uint8_t data[maxLength];
             uint32_t dataLength;
             getMeasurements(data, maxLength, dataLength, pendingPublishes);
 
-            uint8_t encodedData[MAX_PUB_SIZE];
+            uint8_t encodedData[config.data.maxPubSize];
             uint32_t encodedDataLength;
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
@@ -514,7 +505,8 @@ int cloudSetParameter(String arg)
     // Match command
     if (strncmp(command, "batchSize", size) == 0)
     {
-        uploadBatchSize = value;
+        config.data.uploadBatchSize = value;
+        config.save();
         return 0;
     }
     else
