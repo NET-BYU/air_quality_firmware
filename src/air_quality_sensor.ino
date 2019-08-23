@@ -8,13 +8,7 @@
 #include "SPS30.h"
 #include "ArduinoJson.h"
 #include "PersistentCounter.h"
-
-#define READ_PERIOD_MS 60000
-#define UPLOAD_PERIOD_MS 1000
-#define UPLOAD_BATCH_SIZE 1
-#define PRINT_SYS_INFO_MS 10000
-
-#define MAX_PUB_SIZE 600 // It is really 622
+#include "PersistentConfig.h"
 
 #define BOOT_LED D3
 #define READ_LED D4
@@ -29,6 +23,14 @@ PRODUCT_VERSION(1);
 PRODUCT_ID(9861);
 PRODUCT_VERSION(1);
 #endif
+
+// Counters
+#define SEQUENCE_COUNT_ADDRESS 0x00
+PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
+
+// Sensor configuration
+#define CONFIG_ADDRESS 0x04
+PersistentConfig config(CONFIG_ADDRESS);
 
 // Write data points to SD card and keep track of what has been ackowledged
 SimpleAckTracker tracker;
@@ -50,10 +52,6 @@ bool rtcPresent = true;
 char energyMeterData[ENERGY_METER_DATA_SIZE];
 bool newEnergyMeterData = false;
 
-// Counters
-#define SEQUENCE_COUNT_ADDRESS 0x00
-PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
-
 // Global variables to keep track of state
 bool saveDataSucess = true;
 int resetReason = RESET_REASON_NONE;
@@ -69,19 +67,17 @@ auto publishLED = JLed(PUBLISH_LED);
 
 // Timers
 bool readDataFlag = true;
-Timer readTimer(READ_PERIOD_MS, []() { readDataFlag = true; });
+Timer readTimer(config.data.readPeriodMs, []() { readDataFlag = true; });
 bool uploadFlag = true;
-Timer uploadTimer(UPLOAD_PERIOD_MS, []() { uploadFlag = true; });
+Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });
 
 // Remote reset variables
-#define DELAY_BEFORE_REBOOT 2000
 unsigned long rebootSync = millis();
 bool resetFlag = false;
 
 // Print system information variables
-bool enablePrintSystemInfo = false;
 bool printSystemInfoFlag = true;
-Timer printSystemInfoTimer(PRINT_SYS_INFO_MS, []() { printSystemInfoFlag = true; });
+Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
 
 // Logging
 Logger encodeLog("app.enocde");
@@ -102,6 +98,7 @@ void setup()
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
     Particle.function("unack", cloudUnackMeasurement);
+    Particle.function("setParam", cloudSetParameter);
 
     // Debugging port
     Serial.begin(9600);
@@ -154,10 +151,13 @@ void setup()
     readTimer.start();
     uploadTimer.start();
 
-    if (enablePrintSystemInfo)
+    if (config.data.enablePrintSystemInfo)
     {
         printSystemInfoTimer.start();
     }
+
+    // Print out configuration information
+    config.print();
 }
 
 void loop()
@@ -192,6 +192,7 @@ void loop()
         }
         else
         {
+            Log.error("Packing measurement FAILED!");
             saveDataSucess = false;
             readLED.Blink(250, 250).Forever();
         }
@@ -226,15 +227,20 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() >= UPLOAD_BATCH_SIZE);
-        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= UPLOAD_BATCH_SIZE)
+        Log.trace("Trying to upload data... (%d, %d, %ld >= %ld (%d))",
+                  !currentlyPublishing,
+                  Particle.connected(),
+                  tracker.unconfirmedCount(),
+                  config.data.uploadBatchSize,
+                  tracker.unconfirmedCount() >= config.data.uploadBatchSize);
+        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= config.data.uploadBatchSize)
         {
-            uint32_t maxLength = MAX_PUB_SIZE - (MAX_PUB_SIZE / 4); // TODO: Should do the ceiling of the division just to be safe
+            uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // TODO: Should do the ceiling of the division just to be safe
             uint8_t data[maxLength];
             uint32_t dataLength;
             getMeasurements(data, maxLength, dataLength, pendingPublishes);
 
-            uint8_t encodedData[MAX_PUB_SIZE];
+            uint8_t encodedData[config.data.maxPubSize];
             uint32_t encodedDataLength;
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
@@ -249,7 +255,7 @@ void loop()
     }
 
     //  Remote Reset Function
-    if (resetFlag && (millis() - rebootSync >= DELAY_BEFORE_REBOOT))
+    if (resetFlag && (millis() - rebootSync >= config.data.delayBeforeReboot))
     {
         Serial.println("Rebooting coprocessor...");
         resetCoprocessor();
@@ -479,6 +485,105 @@ int cloudUnackMeasurement(String arg)
 {
     // TODO: Put code here...
     return 0;
+}
+
+int cloudSetParameter(String arg)
+{
+    const char *argStr = arg.c_str();
+    char *loc = strchr(argStr, '|');
+
+    if (loc == NULL)
+    {
+        Log.error("Incorrect format for set paramter: %s", argStr);
+        return -1;
+    }
+
+    const char *command = argStr;
+    const char *valueStr = loc + 1; // Skip sentinal character
+    int size = loc - command;
+
+    // Parse value
+    int value = atoi(valueStr);
+    if (value == 0)
+    {
+        Log.error("Unable to parse value: %s", argStr);
+        return -1;
+    }
+
+    // Match command
+    if (strncmp(command, "readPeriodMs", size) == 0)
+    {
+        Log.info("Updating readPeriodMs (%d)", value);
+        config.data.readPeriodMs = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "uploadPeriodMs", size) == 0)
+    {
+        Log.info("Updating uploadPeriodMs (%d)", value);
+        config.data.uploadPeriodMs = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "printSysInfoMs", size) == 0)
+    {
+        Log.info("Updating printSysInfoMs (%d)", value);
+        config.data.printSysInfoMs = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "enablePrintSystemInfo", size) == 0)
+    {
+        Log.info("Updating enablePrintSystemInfo (%d)", value);
+        config.data.enablePrintSystemInfo = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "uploadBatchSize", size) == 0)
+    {
+        Log.info("Updating uploadBatchSize (%d)", value);
+        config.data.uploadBatchSize = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "maxPubSize", size) == 0)
+    {
+        Log.info("Updating maxPubSize (%d)", value);
+        config.data.maxPubSize = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "delayBeforeReboot", size) == 0)
+    {
+        Log.info("Updating delayBeforeReboot (%d)", value);
+        config.data.delayBeforeReboot = value;
+        config.save();
+        config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "reset", size) == 0)
+    {
+        Log.info("Restting configuration");
+        config.reset();
+        config.print();
+        return 0;
+    }
+
+    Log.error("No matching command: %s", argStr);
+    return -1;
 }
 
 void printSystemInfo()
