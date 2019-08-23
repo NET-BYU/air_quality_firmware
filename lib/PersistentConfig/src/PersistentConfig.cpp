@@ -45,14 +45,16 @@ void PersistentConfig::reset()
 
 void PersistentConfig::print()
 {
-    Log.info("\n~~~~~~~ Configuration ~~~~~~~");
-    Log.info("version: %ld", data.version);
-    Log.info("readPeriodMs: %ld", data.readPeriodMs);
-    Log.info("uploadPeriodMs: %ld", data.uploadPeriodMs);
-    Log.info("printSysInfoMs: %ld", data.printSysInfoMs);
-    Log.info("enablePrintSystemInfo: %ld", data.enablePrintSystemInfo);
-    Log.info("uploadBatchSize: %ld", data.uploadBatchSize);
-    Log.info("maxPubSize: %ld", data.maxPubSize);
-    Log.info("delayBeforeReboot: %ld", data.delayBeforeReboot);
-    Log.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    Log.info("");
+    Log.info("~~~~~~~ Configuration ~~~~~~~");
+    Log.info("\tversion: %ld", data.version);
+    Log.info("\treadPeriodMs: %ld", data.readPeriodMs);
+    Log.info("\tuploadPeriodMs: %ld", data.uploadPeriodMs);
+    Log.info("\tprintSysInfoMs: %ld", data.printSysInfoMs);
+    Log.info("\tenablePrintSystemInfo: %ld", data.enablePrintSystemInfo);
+    Log.info("\tuploadBatchSize: %ld", data.uploadBatchSize);
+    Log.info("\tmaxPubSize: %ld", data.maxPubSize);
+    Log.info("\tdelayBeforeReboot: %ld", data.delayBeforeReboot);
+    Log.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+    Log.info("");
 }
