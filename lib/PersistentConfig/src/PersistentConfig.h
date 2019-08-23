@@ -13,8 +13,7 @@ struct v1
     uint32_t uploadBatchSize;
     uint32_t maxPubSize;
     uint32_t delayBeforeReboot;
-
-} v1Default = {1, 60000, 1000, 10000, 1, 600, 2000};
+};
 typedef struct v1 Config;
 
 class PersistentConfig
@@ -23,12 +22,16 @@ public:
     PersistentConfig(uint32_t address);
     void save();
 
+    void reset();
+
     Config data;
 
 private:
     Logger log;
     uint32_t address;
     void load();
+
+    Config v1Default = {1, 60000, 1000, 10000, 1, 600, 2000};
 };
 
 #endif
