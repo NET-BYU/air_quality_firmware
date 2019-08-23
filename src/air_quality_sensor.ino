@@ -226,8 +226,13 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d)", !currentlyPublishing, Particle.connected(), tracker.unconfirmedCount() >= config.data.maxPubSize);
-        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= config.data.maxPubSize)
+        Log.trace("Trying to upload data... (%d, %d, %d >= %d (%d))",
+                  !currentlyPublishing,
+                  Particle.connected(),
+                  tracker.unconfirmedCount(),
+                  config.data.uploadBatchSize,
+                  tracker.unconfirmedCount() >= config.data.uploadBatchSize);
+        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= config.data.uploadBatchSize)
         {
             uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // TODO: Should do the ceiling of the division just to be safe
             uint8_t data[maxLength];
