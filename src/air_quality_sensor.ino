@@ -24,6 +24,11 @@ PRODUCT_ID(9861);
 PRODUCT_VERSION(1);
 #endif
 
+// Counters
+#define SEQUENCE_COUNT_ADDRESS 0x00
+PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
+
+// Sensor configuration
 #define CONFIG_ADDRESS 0x04
 PersistentConfig config(CONFIG_ADDRESS);
 
@@ -47,10 +52,6 @@ bool rtcPresent = true;
 char energyMeterData[ENERGY_METER_DATA_SIZE];
 bool newEnergyMeterData = false;
 
-// Counters
-#define SEQUENCE_COUNT_ADDRESS 0x00
-PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
-
 // Global variables to keep track of state
 bool saveDataSucess = true;
 int resetReason = RESET_REASON_NONE;
@@ -71,7 +72,6 @@ bool uploadFlag = true;
 Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });
 
 // Remote reset variables
-#define DELAY_BEFORE_REBOOT 2000
 unsigned long rebootSync = millis();
 bool resetFlag = false;
 
@@ -156,6 +156,9 @@ void setup()
     {
         printSystemInfoTimer.start();
     }
+
+    // Print out configuration information
+    config.print();
 }
 
 void loop()
@@ -247,7 +250,7 @@ void loop()
     }
 
     //  Remote Reset Function
-    if (resetFlag && (millis() - rebootSync >= DELAY_BEFORE_REBOOT))
+    if (resetFlag && (millis() - rebootSync >= config.data.delayBeforeReboot))
     {
         Serial.println("Rebooting coprocessor...");
         resetCoprocessor();
