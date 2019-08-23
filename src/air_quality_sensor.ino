@@ -76,7 +76,6 @@ unsigned long rebootSync = millis();
 bool resetFlag = false;
 
 // Print system information variables
-bool enablePrintSystemInfo = false;
 bool printSystemInfoFlag = true;
 Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
 
@@ -152,7 +151,7 @@ void setup()
     readTimer.start();
     uploadTimer.start();
 
-    if (enablePrintSystemInfo)
+    if (config.data.enablePrintSystemInfo)
     {
         printSystemInfoTimer.start();
     }

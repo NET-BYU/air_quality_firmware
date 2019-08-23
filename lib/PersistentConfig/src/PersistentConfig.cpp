@@ -50,6 +50,7 @@ void PersistentConfig::print()
     Log.info("readPeriodMs: %ld", data.readPeriodMs);
     Log.info("uploadPeriodMs: %ld", data.uploadPeriodMs);
     Log.info("printSysInfoMs: %ld", data.printSysInfoMs);
+    Log.info("enablePrintSystemInfo: %ld", data.enablePrintSystemInfo);
     Log.info("uploadBatchSize: %ld", data.uploadBatchSize);
     Log.info("maxPubSize: %ld", data.maxPubSize);
     Log.info("delayBeforeReboot: %ld", data.delayBeforeReboot);

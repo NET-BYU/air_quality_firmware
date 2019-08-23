@@ -10,6 +10,7 @@ struct v1
     uint32_t readPeriodMs;
     uint32_t uploadPeriodMs;
     uint32_t printSysInfoMs;
+    uint32_t enablePrintSystemInfo;
     uint32_t uploadBatchSize;
     uint32_t maxPubSize;
     uint32_t delayBeforeReboot;
@@ -33,7 +34,7 @@ private:
     uint32_t address;
     void load();
 
-    Config v1Default = {1, 60000, 1000, 10000, 1, 600, 2000};
+    Config v1Default = {1, 60000, 1000, 10000, 0, 1, 600, 2000};
 };
 
 #endif
