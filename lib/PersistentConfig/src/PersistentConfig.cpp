@@ -45,7 +45,6 @@ void PersistentConfig::reset()
 
 void PersistentConfig::print()
 {
-    Log.info("");
     Log.info("~~~~~~~ Configuration ~~~~~~~");
     Log.info("\tversion: %ld", data.version);
     Log.info("\treadPeriodMs: %ld", data.readPeriodMs);
@@ -56,5 +55,4 @@ void PersistentConfig::print()
     Log.info("\tmaxPubSize: %ld", data.maxPubSize);
     Log.info("\tdelayBeforeReboot: %ld", data.delayBeforeReboot);
     Log.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-    Log.info("");
 }
