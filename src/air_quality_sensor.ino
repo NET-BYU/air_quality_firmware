@@ -8,6 +8,7 @@
 #include "SPS30.h"
 #include "ArduinoJson.h"
 #include "PersistentCounter.h"
+// #include "PersistentConfig.h"
 
 #define READ_PERIOD_MS 60000
 #define UPLOAD_PERIOD_MS 1000
@@ -29,6 +30,8 @@ PRODUCT_VERSION(1);
 PRODUCT_ID(9861);
 PRODUCT_VERSION(1);
 #endif
+
+// PersistentConfig config;
 
 // Operation parameters
 uint16_t uploadBatchSize = DEFAULT_UPLOAD_BATCH_SIZE;
