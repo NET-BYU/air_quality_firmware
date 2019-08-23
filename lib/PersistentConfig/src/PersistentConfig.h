@@ -24,6 +24,8 @@ public:
 
     void reset();
 
+    void print();
+
     Config data;
 
 private:

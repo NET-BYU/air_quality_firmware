@@ -42,3 +42,16 @@ void PersistentConfig::reset()
     data = v1Default;
     save();
 }
+
+void PersistentConfig::print()
+{
+    Log.info("\n~~~~~~~ Configuration ~~~~~~~");
+    Log.info("version: %ld", data.version);
+    Log.info("readPeriodMs: %ld", data.readPeriodMs);
+    Log.info("uploadPeriodMs: %ld", data.uploadPeriodMs);
+    Log.info("printSysInfoMs: %ld", data.printSysInfoMs);
+    Log.info("uploadBatchSize: %ld", data.uploadBatchSize);
+    Log.info("maxPubSize: %ld", data.maxPubSize);
+    Log.info("delayBeforeReboot: %ld", data.delayBeforeReboot);
+    Log.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+}
