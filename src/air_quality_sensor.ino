@@ -192,6 +192,7 @@ void loop()
         }
         else
         {
+            Log.error("Packing measurement FAILED!");
             saveDataSucess = false;
             readLED.Blink(250, 250).Forever();
         }
@@ -226,7 +227,7 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
-        Log.trace("Trying to upload data... (%d, %d, %d >= %d (%d))",
+        Log.trace("Trying to upload data... (%d, %d, %ld >= %ld (%d))",
                   !currentlyPublishing,
                   Particle.connected(),
                   tracker.unconfirmedCount(),
