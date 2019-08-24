@@ -46,6 +46,7 @@ SCD30 airSensor;
 // RTC
 RTC_DS3231 rtc;
 bool rtcPresent = true;
+bool rtcSet = true;
 
 // Energy Meter Data
 #define ENERGY_METER_DATA_SIZE 200
@@ -124,6 +125,17 @@ void setup()
         Log.error("Could not start RTC!");
         success = false;
         rtcPresent = false;
+    }
+    else
+    {
+        uint32_t now = rtc.now().unixtime();
+
+        // Now make sure the time is somewhat right
+        if (now < 1560000000)
+        {
+            Log.warn("RTC is present, but has not been set.");
+            rtcSet = false;
+        }
     }
 
     if (!pmSensor.begin())
@@ -252,6 +264,20 @@ void loop()
         }
 
         uploadFlag = false;
+    }
+
+    // Update RTC if needed
+    if (rtcPresent && !rtcSet && Particle.connected() && Time.isValid())
+    {
+        Log.info("Setting clock...");
+        rtc.adjust(DateTime(Time.now()));
+        rtcSet = true;
+
+        delay(500);
+
+        DateTime now = rtc.now();
+        uint32_t timestamp = now.unixtime();
+        Log.info("Time is set to: %ld", timestamp);
     }
 
     //  Remote Reset Function
