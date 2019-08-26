@@ -69,16 +69,30 @@ auto publishLED = JLed(PUBLISH_LED);
 // Timers
 bool readDataFlag = true;
 Timer readTimer(config.data.readPeriodMs, []() { readDataFlag = true; });
+
 bool uploadFlag = true;
 Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });
+
+bool printSystemInfoFlag = true;
+Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
+
+#define MAX_RECONNECT_COUNT 30
+uint32_t connectingCounter = 0;
+Timer connectingTimer(60000, []() {
+    if (connecting())
+    {
+        Log.info("Increasing connectingCounter: %ld", connectingCounter);
+        connectingCounter++;
+    }
+    else
+    {
+        connectingCounter = 0;
+    }
+});
 
 // Remote reset variables
 unsigned long rebootSync = millis();
 bool resetFlag = false;
-
-// Print system information variables
-bool printSystemInfoFlag = true;
-Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
 
 // Logging
 Logger encodeLog("app.encode");
@@ -162,6 +176,7 @@ void setup()
     // Start timers
     readTimer.start();
     uploadTimer.start();
+    connectingTimer.start();
 
     if (config.data.enablePrintSystemInfo)
     {
@@ -290,6 +305,12 @@ void loop()
         System.reset();
     }
 
+    if (connectingCounter >= MAX_RECONNECT_COUNT)
+    {
+        Log.warn("Rebooting myself because I've been connecting for too long.");
+        System.reset();
+    }
+
     if (printSystemInfoFlag)
     {
         printSystemInfo();
@@ -308,6 +329,17 @@ void serialEvent1()
     Serial1.readBytes(energyMeterData, ENERGY_METER_DATA_SIZE);
     serialLog.info("Energy meter data: %s\n", energyMeterData);
     newEnergyMeterData = true;
+}
+
+bool connecting()
+{
+#if Wiring_WiFi
+    return WiFi.connecting();
+#elif Wiring_Cellular
+    return Cellular.connecting();
+#else
+    return false;
+#endif
 }
 
 void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
