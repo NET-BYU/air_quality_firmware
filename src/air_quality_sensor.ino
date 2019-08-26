@@ -81,10 +81,10 @@ bool printSystemInfoFlag = true;
 Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
 
 // Logging
-Logger encodeLog("app.enocde");
+Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
 SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
-                                             {"app.enocde", LOG_LEVEL_INFO}});
+                                             {"app.encode", LOG_LEVEL_INFO}});
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -283,10 +283,10 @@ void loop()
     //  Remote Reset Function
     if (resetFlag && (millis() - rebootSync >= config.data.delayBeforeReboot))
     {
-        Serial.println("Rebooting coprocessor...");
+        Log.info("Rebooting coprocessor...");
         resetCoprocessor();
 
-        Serial.println("Rebooting myself...");
+        Log.info("Rebooting myself...");
         System.reset();
     }
 
