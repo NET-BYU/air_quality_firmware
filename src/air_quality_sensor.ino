@@ -80,21 +80,7 @@ Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
 
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
-Timer connectingTimer(60000, []() {
-    if (connecting())
-    {
-        Log.info("Increasing connectingCounter: %ld", connectingCounter);
-        connectingCounter++;
-    }
-    else
-    {
-        connectingCounter = 0;
-    }
-});
-
-// Remote reset variables
-unsigned long rebootSync = millis();
-bool resetFlag = false;
+Timer connectingTimer(60000, checkConnecting);
 
 // Logging
 Logger encodeLog("app.encode");
@@ -508,6 +494,19 @@ bool encodeMeasurements(uint8_t *in, uint32_t inLength, uint8_t *out, uint32_t *
     }
 
     return true;
+}
+
+void checkConnecting()
+{
+    if (connecting())
+    {
+        Log.info("Increasing connectingCounter: %ld", connectingCounter);
+        connectingCounter++;
+    }
+    else
+    {
+        connectingCounter = 0;
+    }
 }
 
 void resetDevice()
