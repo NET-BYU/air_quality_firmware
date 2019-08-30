@@ -76,6 +76,8 @@ Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });
 bool printSystemInfoFlag = true;
 Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
 
+Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
+
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
 Timer connectingTimer(60000, []() {
@@ -295,16 +297,6 @@ void loop()
         Log.info("Time is set to: %ld", timestamp);
     }
 
-    //  Remote Reset Function
-    if (resetFlag && (millis() - rebootSync >= config.data.delayBeforeReboot))
-    {
-        Log.info("Rebooting coprocessor...");
-        resetCoprocessor();
-
-        Log.info("Rebooting myself...");
-        System.reset();
-    }
-
     if (connectingCounter >= MAX_RECONNECT_COUNT)
     {
         Log.warn("Rebooting myself because I've been connecting for too long.");
@@ -518,6 +510,15 @@ bool encodeMeasurements(uint8_t *in, uint32_t inLength, uint8_t *out, uint32_t *
     return true;
 }
 
+void resetDevice()
+{
+    Log.info("Rebooting coprocessor...");
+    resetCoprocessor();
+
+    Log.info("Rebooting myself...");
+    System.reset();
+}
+
 void resetCoprocessor()
 {
     Serial1.printf("reset");
@@ -527,8 +528,7 @@ void resetCoprocessor()
 int cloudReset(String arg)
 {
     Serial.println("Cloud reset called...");
-    resetFlag = true;
-    rebootSync = millis();
+    resetTimer.start();
     return 0;
 }
 
