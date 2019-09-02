@@ -631,9 +631,9 @@ int cloudSetParameter(String arg)
         return 0;
     }
 
-    if (strncmp(command, "reset", size) == 0)
+    if (strncmp(command, "resetConfig", size) == 0)
     {
-        Log.info("Restting configuration");
+        Log.info("Resetting configuration");
         config.reset();
         config.print();
         return 0;
