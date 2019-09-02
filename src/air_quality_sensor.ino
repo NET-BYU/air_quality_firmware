@@ -639,6 +639,23 @@ int cloudSetParameter(String arg)
         return 0;
     }
 
+    if (strncmp(command, "scd30SetAltitude", size) == 0)
+    {
+        Log.info("Setting altitude on SCD30");
+        airSensor.setAltitudeCompensation(value);
+        return 0;
+    }
+
+    if (strncmp(command, "scd30SetTemperatureOffset", size) == 0)
+    {
+        Log.info("Setting temperature offset on SCD30");
+        // Equivilant to airSensor.SetTemperatureOffset except that that method requires a float.
+        // Rather than casting to a float and dividing by 100, just for that function to multiply
+        // by 100 and cast back into a uint_16, I am calling the underlying method directly.
+        airSensor.sendCommand(COMMAND_SET_TEMPERATURE_OFFSET, value);
+        return 0;
+    }
+
     Log.error("No matching command: %s", argStr);
     return -1;
 }
