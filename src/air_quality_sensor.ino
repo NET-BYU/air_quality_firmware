@@ -250,7 +250,8 @@ void loop()
                   tracker.unconfirmedCount() >= config.data.uploadBatchSize);
         if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= config.data.uploadBatchSize)
         {
-            uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // TODO: Should do the ceiling of the division just to be safe
+            // TODO: Should do the ceiling of the division just to be safe
+            uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // Account for overhead of base85 encoding
             uint8_t data[maxLength];
             uint32_t dataLength;
             getMeasurements(data, maxLength, dataLength, pendingPublishes);
@@ -322,15 +323,26 @@ bool connecting()
 
 void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
 {
+    Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
     count = 0;
 
     // Figure out how many measurements can fit in to buffer
-    while (total < maxLength - count && count < tracker.unconfirmedCount())
+    while (total < maxLength && count < tracker.unconfirmedCount())
     {
         total += tracker.getLengthOf(count);
+        total += 1; // Include length byte
         count++;
     }
+
+    if (total > maxLength)
+    {
+        // This means we more unconfirmed measurements than we have room for, so take one less
+        count--;
+        total -= tracker.getLengthOf(count);
+        total -= 1; // Include length byte
+    }
+
     Log.info("Number of measurements: %d (%ld)\n", count, total);
 
     // Copy over data into data buffers
@@ -345,6 +357,7 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
     }
 
     length = offset;
+    Log.info("Length of data: %ld", length);
 }
 
 void readSensors(SensorPacket *packet)
