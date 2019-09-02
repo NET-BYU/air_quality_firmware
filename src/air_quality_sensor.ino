@@ -598,7 +598,7 @@ int cloudSetParameter(String arg)
     if (strncmp(command, "enablePrintSystemInfo", size) == 0)
     {
         Log.info("Updating enablePrintSystemInfo (%d)", value);
-        config.data.enablePrintSystemInfo = value;
+        config.data.enablePrintSystemInfo = value - 1;
         config.save();
         config.print();
         return 0;
