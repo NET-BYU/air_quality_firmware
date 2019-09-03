@@ -91,9 +91,15 @@ const int SD_CHIP_SELECT = A5;
 // Logging
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
-// SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
-//                                              {"app.encode", LOG_LEVEL_INFO}});
+
+#define SD_LOGGING 0
+
+#if SD_LOGGING
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
+#else
+SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
+                                             {"app.encode", LOG_LEVEL_INFO}});
+#endif
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -168,7 +174,9 @@ void setup()
         bootLED.Blink(1000, 1000);
     }
 
+#if SD_LOGGING
     sdLogHandler.setup();
+#endif
 
     // Start timers
     readTimer.start();
@@ -305,7 +313,9 @@ void loop()
         printSystemInfoFlag = false;
     }
 
+#if SD_LOGGING
     sdLogHandler.loop();
+#endif
 
     // Update LEDs
     bootLED.Update();
