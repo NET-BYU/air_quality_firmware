@@ -9,6 +9,8 @@
 #include "ArduinoJson.h"
 #include "PersistentCounter.h"
 #include "PersistentConfig.h"
+#include "SdFat.h"
+#include "SdCardLogHandlerRK.h"
 
 #define BOOT_LED D3
 #define READ_LED D4
@@ -82,11 +84,16 @@ Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
 uint32_t connectingCounter = 0;
 Timer connectingTimer(60000, checkConnecting);
 
+// SD Card
+SdFat sd;
+const int SD_CHIP_SELECT = A5;
+
 // Logging
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
-SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
-                                             {"app.encode", LOG_LEVEL_INFO}});
+// SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
+//                                              {"app.encode", LOG_LEVEL_INFO}});
+SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -160,6 +167,8 @@ void setup()
     {
         bootLED.Blink(1000, 1000);
     }
+
+    sdLogHandler.setup();
 
     // Start timers
     readTimer.start();
@@ -295,6 +304,8 @@ void loop()
         printSystemInfo();
         printSystemInfoFlag = false;
     }
+
+    sdLogHandler.loop();
 
     // Update LEDs
     bootLED.Update();
