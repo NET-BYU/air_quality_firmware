@@ -93,7 +93,6 @@ Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
 
 #define SD_LOGGING 0
-
 #if SD_LOGGING
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
 #else
@@ -462,13 +461,13 @@ void readSensors(SensorPacket *packet)
             packet->has_power = true;
 
             packet->apparent_power = doc["a"];
-            packet->has_apparent_power = true;
+            packet->has_apparent_power = false;
 
             packet->reactive_power = doc["r"];
-            packet->has_reactive_power = true;
+            packet->has_reactive_power = false;
 
             packet->power_factor = (float)doc["f"] * 100;
-            packet->has_power_factor = true;
+            packet->has_power_factor = false;
         }
 
         newEnergyMeterData = false;
