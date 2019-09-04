@@ -420,6 +420,11 @@ void readSensors(SensorPacket *packet)
         packet->pm10 = pmMeasurement[3];
         packet->has_pm10 = true;
     }
+    else
+    {
+        // There should always be data available so begin measuring again
+        pmSensor.begin();
+    }
 
     if (airSensor.dataAvailable())
     {
@@ -434,6 +439,11 @@ void readSensors(SensorPacket *packet)
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
+    }
+    else
+    {
+        // There should always be data available so begin measuring again
+        airSensor.begin();
     }
 
     if (newEnergyMeterData)
