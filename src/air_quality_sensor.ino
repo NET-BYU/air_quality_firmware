@@ -113,7 +113,7 @@ void setup()
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
     Particle.function("unack", cloudUnackMeasurement);
-    Particle.function("setParam", cloudSetParameter);
+    Particle.function("param", cloudParameters);
 
     // Debugging port
     Serial.begin(9600);
@@ -594,94 +594,160 @@ int cloudUnackMeasurement(String arg)
     return 0;
 }
 
-int cloudSetParameter(String arg)
+int cloudParameters(String arg)
 {
+    bool settingValue = true;
+    int32_t value = 0;
+    uint8_t commandLength = 0;
+
     const char *argStr = arg.c_str();
-    char *loc = strchr(argStr, '|');
+    const char *command = argStr;
+
+    // Look for equals sign
+    char *loc = strchr(argStr, '=');
 
     if (loc == NULL)
     {
-        Log.error("Incorrect format for set paramter: %s", argStr);
-        return -1;
+        // Since there is no equals sign, then we are getting a value, not setting
+        settingValue = false;
+
+        commandLength = arg.length();
     }
-
-    const char *command = argStr;
-    const char *valueStr = loc + 1; // Skip sentinal character
-    int size = loc - command;
-
-    // Parse value
-    int value = atoi(valueStr);
-    if (value == 0)
+    else
     {
-        Log.error("Unable to parse value: %s", argStr);
-        return -1;
+        // Since there is an equals sign, we are setting a value
+        settingValue = true;
+
+        const char *valueStr = loc + 1; // Skip sentinal character
+
+        // Parse value
+        value = atoi(valueStr);
+        if (value == 0)
+        {
+            Log.error("Unable to parse value: %s", argStr);
+            return -1;
+        }
+
+        commandLength = loc - command;
     }
 
     // Match command
-    if (strncmp(command, "readPeriodMs", size) == 0)
+    if (strncmp(command, "readPeriodMs", commandLength) == 0)
     {
-        Log.info("Updating readPeriodMs (%d)", value);
-        config.data.readPeriodMs = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating readPeriodMs (%ld)", value);
+            config.data.readPeriodMs = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.readPeriodMs;
+        }
     }
 
-    if (strncmp(command, "uploadPeriodMs", size) == 0)
+    if (strncmp(command, "uploadPeriodMs", commandLength) == 0)
     {
-        Log.info("Updating uploadPeriodMs (%d)", value);
-        config.data.uploadPeriodMs = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating uploadPeriodMs (%ld)", value);
+            config.data.uploadPeriodMs = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.uploadPeriodMs;
+        }
     }
 
-    if (strncmp(command, "printSysInfoMs", size) == 0)
+    if (strncmp(command, "printSysInfoMs", commandLength) == 0)
     {
-        Log.info("Updating printSysInfoMs (%d)", value);
-        config.data.printSysInfoMs = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating printSysInfoMs (%ld)", value);
+            config.data.printSysInfoMs = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.printSysInfoMs;
+        }
     }
 
-    if (strncmp(command, "enablePrintSystemInfo", size) == 0)
+    if (strncmp(command, "enablePrintSystemInfo", commandLength) == 0)
     {
-        Log.info("Updating enablePrintSystemInfo (%d)", value);
-        config.data.enablePrintSystemInfo = value - 1;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating enablePrintSystemInfo (%ld)", value);
+            // value can't be 0 so we add 1. This means 1 is false and 2 is true
+            // To get it back into a real bool, we substract 1
+            config.data.enablePrintSystemInfo = value - 1;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            // To stay consistent, we add 1
+            return config.data.enablePrintSystemInfo + 1;
+        }
     }
 
-    if (strncmp(command, "uploadBatchSize", size) == 0)
+    if (strncmp(command, "uploadBatchSize", commandLength) == 0)
     {
-        Log.info("Updating uploadBatchSize (%d)", value);
-        config.data.uploadBatchSize = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating uploadBatchSize (%ld)", value);
+            config.data.uploadBatchSize = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.uploadBatchSize;
+        }
     }
 
-    if (strncmp(command, "maxPubSize", size) == 0)
+    if (strncmp(command, "maxPubSize", commandLength) == 0)
     {
-        Log.info("Updating maxPubSize (%d)", value);
-        config.data.maxPubSize = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating maxPubSize (%ld)", value);
+            config.data.maxPubSize = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.maxPubSize;
+        }
     }
 
-    if (strncmp(command, "delayBeforeReboot", size) == 0)
+    if (strncmp(command, "delayBeforeReboot", commandLength) == 0)
     {
-        Log.info("Updating delayBeforeReboot (%d)", value);
-        config.data.delayBeforeReboot = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating delayBeforeReboot (%ld)", value);
+            config.data.delayBeforeReboot = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.delayBeforeReboot;
+        }
     }
 
-    if (strncmp(command, "resetConfig", size) == 0)
+    if (strncmp(command, "resetConfig", commandLength) == 0)
     {
         Log.info("Resetting configuration");
         config.reset();
@@ -689,14 +755,14 @@ int cloudSetParameter(String arg)
         return 0;
     }
 
-    if (strncmp(command, "scd30SetAltitude", size) == 0)
+    if (strncmp(command, "scd30SetAltitude", commandLength) == 0)
     {
         Log.info("Setting altitude on SCD30");
         airSensor.setAltitudeCompensation(value);
         return 0;
     }
 
-    if (strncmp(command, "scd30SetTemperatureOffset", size) == 0)
+    if (strncmp(command, "scd30SetTemperatureOffset", commandLength) == 0)
     {
         Log.info("Setting temperature offset on SCD30");
         // Equivilant to airSensor.SetTemperatureOffset except that that method requires a float.
