@@ -488,6 +488,13 @@ void readSensors(SensorPacket *packet)
         packet->reset_reason = resetReason;
         packet->has_reset_reason = true;
 
+        if (resetReason == RESET_REASON_PANIC)
+        {
+            uint32_t resetReasondata = System.resetReasonData();
+            packet->reset_reason_data = resetReasondata;
+            packet->has_reset_reason_data = true;
+        }
+
         // Make sure to read reset reason only once
         resetReason = RESET_REASON_NONE;
     }
