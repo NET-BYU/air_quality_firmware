@@ -3,7 +3,7 @@
 #include "pb_encode.h"
 #include "RTClibrary.h"
 #include "sensor_packet.pb.h"
-#include "SimpleAckTracker.h"
+#include "AckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
 #include "ArduinoJson.h"
@@ -34,8 +34,12 @@ PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
 #define CONFIG_ADDRESS 0x04
 PersistentConfig config(CONFIG_ADDRESS);
 
+// SD Card
+SdFat sd;
+const int SD_CHIP_SELECT = A5;
+
 // Write data points to SD card and keep track of what has been ackowledged
-SimpleAckTracker tracker;
+AckTracker tracker(sd, SD_CHIP_SELECT, "data", 300);
 uint8_t pendingPublishes = 0;
 
 // PM Sensor
@@ -84,9 +88,7 @@ Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
 uint32_t connectingCounter = 0;
 Timer connectingTimer(60000, checkConnecting);
 
-// SD Card
-SdFat sd;
-const int SD_CHIP_SELECT = A5;
+#define LENGTH_HEADER_SIZE 2
 
 // Logging
 Logger encodeLog("app.encode");
@@ -122,6 +124,12 @@ void setup()
     Serial1.begin(115200);
 
     delay(5000);
+
+    if (!tracker.begin())
+    {
+        Log.error("Could not start tracker");
+        success = false;
+    }
 
     if (!rtc.begin())
     {
@@ -209,8 +217,7 @@ void loop()
         if (packMeasurement(&packet, SensorPacket_size, data, &length))
         {
             Log.info("Adding data to tracker (%d)...", length);
-            tracker.add(packet.timestamp, length, data);
-            if (true)
+            if (tracker.add(packet.sequence, length, data))
             {
                 saveDataSucess = true;
                 readLED.Off().Update();
@@ -238,10 +245,7 @@ void loop()
         if (currentPublish.isSucceeded())
         {
             Log.info("Publication was successful!");
-            for (uint8_t i = 0; i < pendingPublishes; i++)
-            {
-                tracker.confirmNext();
-            }
+            tracker.confirmNext(pendingPublishes);
             Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
             publishLED.Off().Update();
         }
@@ -350,8 +354,8 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
     // Figure out how many measurements can fit in to buffer
     while (total < maxLength && count < tracker.unconfirmedCount())
     {
-        total += tracker.getLengthOf(count);
-        total += 1; // Include length byte
+        total += tracker.getLength(count);
+        total += LENGTH_HEADER_SIZE;
         count++;
     }
 
@@ -359,8 +363,8 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
     {
         // This means we more unconfirmed measurements than we have room for, so take one less
         count--;
-        total -= tracker.getLengthOf(count);
-        total -= 1; // Include length byte
+        total -= tracker.getLength(count);
+        total -= LENGTH_HEADER_SIZE;
     }
 
     Log.info("Number of measurements: %d (%ld)\n", count, total);
@@ -370,10 +374,10 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
     for (uint32_t i = 0; i < count; i++)
     {
         uint32_t id;
-        uint8_t item_length;
-        tracker.get(i, id, item_length, data + offset + 1);
+        uint16_t item_length;
+        tracker.get(i, id, item_length, data + offset + LENGTH_HEADER_SIZE);
         data[offset] = item_length;
-        offset += item_length + 1;
+        offset += item_length + LENGTH_HEADER_SIZE;
     }
 
     length = offset;
