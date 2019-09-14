@@ -383,7 +383,8 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
         uint16_t item_length;
         tracker.get(i, id, item_length, data + offset + LENGTH_HEADER_SIZE);
         Log.info("Getting data from AckTracker (%lu, %lu, %u)", i, id, item_length);
-        data[offset] = item_length;
+        data[offset] = (uint8_t)item_length;
+        data[offset + 1] = (uint8_t)(item_length >> 8);
         offset += item_length + LENGTH_HEADER_SIZE;
     }
 
