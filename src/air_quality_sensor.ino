@@ -99,7 +99,8 @@ Logger serialLog("app.serial");
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
 #else
 SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
-                                             {"app.encode", LOG_LEVEL_INFO}});
+                                             {"app.encode", LOG_LEVEL_INFO},
+                                             {"AckTracker", LOG_LEVEL_INFO}});
 #endif
 
 // Particle system stuff
@@ -110,13 +111,15 @@ STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 void setup()
 {
     bool success = true;
-    resetReason = System.resetReason();
 
     // Set up cloud functions
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
     Particle.function("unack", cloudUnackMeasurement);
     Particle.function("param", cloudParameters);
+
+    // Get reset reason to publish later
+    resetReason = System.resetReason();
 
     // Debugging port
     Serial.begin(9600);
@@ -271,7 +274,7 @@ void loop()
                   tracker.unconfirmedCount(),
                   config.data.uploadBatchSize,
                   tracker.unconfirmedCount() >= config.data.uploadBatchSize);
-        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= config.data.uploadBatchSize)
+        if (!currentlyPublishing && Particle.connected() && (tracker.unconfirmedCount() >= config.data.uploadBatchSize))
         {
             // TODO: Should do the ceiling of the division just to be safe
             uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // Account for overhead of base85 encoding
@@ -284,7 +287,7 @@ void loop()
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
             Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
-            Log.info("Publishing data: " + String((char *)encodedData));
+            Log.info("Publishing data: %s", (char *)encodedData);
             currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
@@ -379,6 +382,7 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
         uint32_t id;
         uint16_t item_length;
         tracker.get(i, id, item_length, data + offset + LENGTH_HEADER_SIZE);
+        Log.info("Getting data from AckTracker (%lu, %lu, %u)", i, id, item_length);
         data[offset] = item_length;
         offset += item_length + LENGTH_HEADER_SIZE;
     }
