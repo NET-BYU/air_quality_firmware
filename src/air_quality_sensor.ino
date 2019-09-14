@@ -104,6 +104,7 @@ SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
+SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
 void setup()
@@ -197,6 +198,8 @@ void setup()
 
     // Print out configuration information
     config.print();
+
+    Particle.connect();
 }
 
 void loop()
