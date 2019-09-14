@@ -34,7 +34,7 @@ private:
     uint32_t address;
     void load();
 
-    Config v1Default = {1, 60000, 1000, 10000, 0, 1, 600, 2000};
+    Config v1Default = {1, 60000, 1000, 10000, 0, 10, 620, 2000};
 };
 
 #endif

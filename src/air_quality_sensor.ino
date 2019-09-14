@@ -3,12 +3,14 @@
 #include "pb_encode.h"
 #include "RTClibrary.h"
 #include "sensor_packet.pb.h"
-#include "SimpleAckTracker.h"
+#include "AckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
 #include "ArduinoJson.h"
 #include "PersistentCounter.h"
 #include "PersistentConfig.h"
+#include "SdFat.h"
+#include "SdCardLogHandlerRK.h"
 
 #define BOOT_LED D3
 #define READ_LED D4
@@ -32,8 +34,12 @@ PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
 #define CONFIG_ADDRESS 0x04
 PersistentConfig config(CONFIG_ADDRESS);
 
+// SD Card
+SdFat sd;
+const int SD_CHIP_SELECT = A5;
+
 // Write data points to SD card and keep track of what has been ackowledged
-SimpleAckTracker tracker;
+AckTracker tracker(sd, SD_CHIP_SELECT, "data", 300);
 uint8_t pendingPublishes = 0;
 
 // PM Sensor
@@ -76,44 +82,44 @@ Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });
 bool printSystemInfoFlag = true;
 Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
 
+Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
+
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
-Timer connectingTimer(60000, []() {
-    if (connecting())
-    {
-        Log.info("Increasing connectingCounter: %ld", connectingCounter);
-        connectingCounter++;
-    }
-    else
-    {
-        connectingCounter = 0;
-    }
-});
+Timer connectingTimer(60000, checkConnecting);
 
-// Remote reset variables
-unsigned long rebootSync = millis();
-bool resetFlag = false;
+#define LENGTH_HEADER_SIZE 2
 
 // Logging
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
+
+#define SD_LOGGING 0
+#if SD_LOGGING
+SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
+#else
 SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
-                                             {"app.encode", LOG_LEVEL_INFO}});
+                                             {"app.encode", LOG_LEVEL_INFO},
+                                             {"AckTracker", LOG_LEVEL_INFO}});
+#endif
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
+SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
 void setup()
 {
     bool success = true;
-    resetReason = System.resetReason();
 
     // Set up cloud functions
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
     Particle.function("unack", cloudUnackMeasurement);
-    Particle.function("setParam", cloudSetParameter);
+    Particle.function("param", cloudParameters);
+
+    // Get reset reason to publish later
+    resetReason = System.resetReason();
 
     // Debugging port
     Serial.begin(9600);
@@ -122,6 +128,12 @@ void setup()
     Serial1.begin(115200);
 
     delay(5000);
+
+    if (!tracker.begin())
+    {
+        Log.error("Could not start tracker");
+        success = false;
+    }
 
     if (!rtc.begin())
     {
@@ -173,6 +185,10 @@ void setup()
         bootLED.Blink(1000, 1000);
     }
 
+#if SD_LOGGING
+    sdLogHandler.setup();
+#endif
+
     // Start timers
     readTimer.start();
     uploadTimer.start();
@@ -185,6 +201,8 @@ void setup()
 
     // Print out configuration information
     config.print();
+
+    Particle.connect();
 }
 
 void loop()
@@ -205,8 +223,7 @@ void loop()
         if (packMeasurement(&packet, SensorPacket_size, data, &length))
         {
             Log.info("Adding data to tracker (%d)...", length);
-            tracker.add(packet.timestamp, length, data);
-            if (true)
+            if (tracker.add(packet.sequence, length, data))
             {
                 saveDataSucess = true;
                 readLED.Off().Update();
@@ -234,10 +251,7 @@ void loop()
         if (currentPublish.isSucceeded())
         {
             Log.info("Publication was successful!");
-            for (uint8_t i = 0; i < pendingPublishes; i++)
-            {
-                tracker.confirmNext();
-            }
+            tracker.confirmNext(pendingPublishes);
             Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
             publishLED.Off().Update();
         }
@@ -260,9 +274,10 @@ void loop()
                   tracker.unconfirmedCount(),
                   config.data.uploadBatchSize,
                   tracker.unconfirmedCount() >= config.data.uploadBatchSize);
-        if (!currentlyPublishing && Particle.connected() && tracker.unconfirmedCount() >= config.data.uploadBatchSize)
+        if (!currentlyPublishing && Particle.connected() && (tracker.unconfirmedCount() >= config.data.uploadBatchSize))
         {
-            uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // TODO: Should do the ceiling of the division just to be safe
+            // TODO: Should do the ceiling of the division just to be safe
+            uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // Account for overhead of base85 encoding
             uint8_t data[maxLength];
             uint32_t dataLength;
             getMeasurements(data, maxLength, dataLength, pendingPublishes);
@@ -272,7 +287,7 @@ void loop()
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
             Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
-            Log.info("Publishing data: " + String((char *)encodedData));
+            Log.info("Publishing data: %s", (char *)encodedData);
             currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
             publishLED.On().Update();
@@ -295,16 +310,6 @@ void loop()
         Log.info("Time is set to: %ld", timestamp);
     }
 
-    //  Remote Reset Function
-    if (resetFlag && (millis() - rebootSync >= config.data.delayBeforeReboot))
-    {
-        Log.info("Rebooting coprocessor...");
-        resetCoprocessor();
-
-        Log.info("Rebooting myself...");
-        System.reset();
-    }
-
     if (connectingCounter >= MAX_RECONNECT_COUNT)
     {
         Log.warn("Rebooting myself because I've been connecting for too long.");
@@ -316,6 +321,10 @@ void loop()
         printSystemInfo();
         printSystemInfoFlag = false;
     }
+
+#if SD_LOGGING
+    sdLogHandler.loop();
+#endif
 
     // Update LEDs
     bootLED.Update();
@@ -344,15 +353,26 @@ bool connecting()
 
 void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
 {
+    Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
     count = 0;
 
     // Figure out how many measurements can fit in to buffer
-    while (total < maxLength - count && count < tracker.unconfirmedCount())
+    while (total < maxLength && count < tracker.unconfirmedCount())
     {
-        total += tracker.getLengthOf(count);
+        total += tracker.getLength(count);
+        total += LENGTH_HEADER_SIZE;
         count++;
     }
+
+    if (total > maxLength)
+    {
+        // This means we more unconfirmed measurements than we have room for, so take one less
+        count--;
+        total -= tracker.getLength(count);
+        total -= LENGTH_HEADER_SIZE;
+    }
+
     Log.info("Number of measurements: %d (%ld)\n", count, total);
 
     // Copy over data into data buffers
@@ -360,13 +380,15 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
     for (uint32_t i = 0; i < count; i++)
     {
         uint32_t id;
-        uint8_t item_length;
-        tracker.get(i, id, item_length, data + offset + 1);
+        uint16_t item_length;
+        tracker.get(i, id, item_length, data + offset + LENGTH_HEADER_SIZE);
+        Log.info("Getting data from AckTracker (%lu, %lu, %u)", i, id, item_length);
         data[offset] = item_length;
-        offset += item_length + 1;
+        offset += item_length + LENGTH_HEADER_SIZE;
     }
 
     length = offset;
+    Log.info("Length of data: %ld", length);
 }
 
 void readSensors(SensorPacket *packet)
@@ -409,6 +431,11 @@ void readSensors(SensorPacket *packet)
         packet->pm10 = pmMeasurement[3];
         packet->has_pm10 = true;
     }
+    else
+    {
+        // There should always be data available so begin measuring again
+        pmSensor.begin();
+    }
 
     if (airSensor.dataAvailable())
     {
@@ -423,6 +450,11 @@ void readSensors(SensorPacket *packet)
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
+    }
+    else
+    {
+        // There should always be data available so begin measuring again
+        airSensor.begin();
     }
 
     if (newEnergyMeterData)
@@ -450,13 +482,13 @@ void readSensors(SensorPacket *packet)
             packet->has_power = true;
 
             packet->apparent_power = doc["a"];
-            packet->has_apparent_power = true;
+            packet->has_apparent_power = false;
 
             packet->reactive_power = doc["r"];
-            packet->has_reactive_power = true;
+            packet->has_reactive_power = false;
 
             packet->power_factor = (float)doc["f"] * 100;
-            packet->has_power_factor = true;
+            packet->has_power_factor = false;
         }
 
         newEnergyMeterData = false;
@@ -466,6 +498,13 @@ void readSensors(SensorPacket *packet)
     {
         packet->reset_reason = resetReason;
         packet->has_reset_reason = true;
+
+        if (resetReason == RESET_REASON_PANIC)
+        {
+            uint32_t resetReasondata = System.resetReasonData();
+            packet->reset_reason_data = resetReasondata;
+            packet->has_reset_reason_data = true;
+        }
 
         // Make sure to read reset reason only once
         resetReason = RESET_REASON_NONE;
@@ -518,6 +557,28 @@ bool encodeMeasurements(uint8_t *in, uint32_t inLength, uint8_t *out, uint32_t *
     return true;
 }
 
+void checkConnecting()
+{
+    if (connecting())
+    {
+        Log.info("Increasing connectingCounter: %ld", connectingCounter);
+        connectingCounter++;
+    }
+    else
+    {
+        connectingCounter = 0;
+    }
+}
+
+void resetDevice()
+{
+    Log.info("Rebooting coprocessor...");
+    resetCoprocessor();
+
+    Log.info("Rebooting myself...");
+    System.reset();
+}
+
 void resetCoprocessor()
 {
     Serial1.printf("reset");
@@ -527,8 +588,7 @@ void resetCoprocessor()
 int cloudReset(String arg)
 {
     Serial.println("Cloud reset called...");
-    resetFlag = true;
-    rebootSync = millis();
+    resetTimer.start();
     return 0;
 }
 
@@ -545,98 +605,181 @@ int cloudUnackMeasurement(String arg)
     return 0;
 }
 
-int cloudSetParameter(String arg)
+int cloudParameters(String arg)
 {
+    bool settingValue = true;
+    int32_t value = 0;
+    uint8_t commandLength = 0;
+
     const char *argStr = arg.c_str();
-    char *loc = strchr(argStr, '|');
+    const char *command = argStr;
+
+    // Look for equals sign
+    char *loc = strchr(argStr, '=');
 
     if (loc == NULL)
     {
-        Log.error("Incorrect format for set paramter: %s", argStr);
-        return -1;
+        // Since there is no equals sign, then we are getting a value, not setting
+        settingValue = false;
+
+        commandLength = arg.length();
     }
-
-    const char *command = argStr;
-    const char *valueStr = loc + 1; // Skip sentinal character
-    int size = loc - command;
-
-    // Parse value
-    int value = atoi(valueStr);
-    if (value == 0)
+    else
     {
-        Log.error("Unable to parse value: %s", argStr);
-        return -1;
+        // Since there is an equals sign, we are setting a value
+        settingValue = true;
+
+        const char *valueStr = loc + 1; // Skip sentinal character
+
+        // Parse value
+        value = atoi(valueStr);
+        if (value == 0)
+        {
+            Log.error("Unable to parse value: %s", argStr);
+            return -1;
+        }
+
+        commandLength = loc - command;
     }
 
     // Match command
-    if (strncmp(command, "readPeriodMs", size) == 0)
+    if (strncmp(command, "readPeriodMs", commandLength) == 0)
     {
-        Log.info("Updating readPeriodMs (%d)", value);
-        config.data.readPeriodMs = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating readPeriodMs (%ld)", value);
+            config.data.readPeriodMs = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.readPeriodMs;
+        }
     }
 
-    if (strncmp(command, "uploadPeriodMs", size) == 0)
+    if (strncmp(command, "uploadPeriodMs", commandLength) == 0)
     {
-        Log.info("Updating uploadPeriodMs (%d)", value);
-        config.data.uploadPeriodMs = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating uploadPeriodMs (%ld)", value);
+            config.data.uploadPeriodMs = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.uploadPeriodMs;
+        }
     }
 
-    if (strncmp(command, "printSysInfoMs", size) == 0)
+    if (strncmp(command, "printSysInfoMs", commandLength) == 0)
     {
-        Log.info("Updating printSysInfoMs (%d)", value);
-        config.data.printSysInfoMs = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating printSysInfoMs (%ld)", value);
+            config.data.printSysInfoMs = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.printSysInfoMs;
+        }
     }
 
-    if (strncmp(command, "enablePrintSystemInfo", size) == 0)
+    if (strncmp(command, "enablePrintSystemInfo", commandLength) == 0)
     {
-        Log.info("Updating enablePrintSystemInfo (%d)", value);
-        config.data.enablePrintSystemInfo = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating enablePrintSystemInfo (%ld)", value);
+            // value can't be 0 so we add 1. This means 1 is false and 2 is true
+            // To get it back into a real bool, we substract 1
+            config.data.enablePrintSystemInfo = value - 1;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            // To stay consistent, we add 1
+            return config.data.enablePrintSystemInfo + 1;
+        }
     }
 
-    if (strncmp(command, "uploadBatchSize", size) == 0)
+    if (strncmp(command, "uploadBatchSize", commandLength) == 0)
     {
-        Log.info("Updating uploadBatchSize (%d)", value);
-        config.data.uploadBatchSize = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating uploadBatchSize (%ld)", value);
+            config.data.uploadBatchSize = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.uploadBatchSize;
+        }
     }
 
-    if (strncmp(command, "maxPubSize", size) == 0)
+    if (strncmp(command, "maxPubSize", commandLength) == 0)
     {
-        Log.info("Updating maxPubSize (%d)", value);
-        config.data.maxPubSize = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating maxPubSize (%ld)", value);
+            config.data.maxPubSize = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.maxPubSize;
+        }
     }
 
-    if (strncmp(command, "delayBeforeReboot", size) == 0)
+    if (strncmp(command, "delayBeforeReboot", commandLength) == 0)
     {
-        Log.info("Updating delayBeforeReboot (%d)", value);
-        config.data.delayBeforeReboot = value;
-        config.save();
-        config.print();
-        return 0;
+        if (settingValue)
+        {
+            Log.info("Updating delayBeforeReboot (%ld)", value);
+            config.data.delayBeforeReboot = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.delayBeforeReboot;
+        }
     }
 
-    if (strncmp(command, "reset", size) == 0)
+    if (strncmp(command, "resetConfig", commandLength) == 0)
     {
-        Log.info("Restting configuration");
+        Log.info("Resetting configuration");
         config.reset();
         config.print();
+        return 0;
+    }
+
+    if (strncmp(command, "scd30SetAltitude", commandLength) == 0)
+    {
+        Log.info("Setting altitude on SCD30");
+        airSensor.setAltitudeCompensation(value);
+        return 0;
+    }
+
+    if (strncmp(command, "scd30SetTemperatureOffset", commandLength) == 0)
+    {
+        Log.info("Setting temperature offset on SCD30");
+        // Equivilant to airSensor.SetTemperatureOffset except that that method requires a float.
+        // Rather than casting to a float and dividing by 100, just for that function to multiply
+        // by 100 and cast back into a uint_16, I am calling the underlying method directly.
+        airSensor.sendCommand(COMMAND_SET_TEMPERATURE_OFFSET, value);
         return 0;
     }
 
