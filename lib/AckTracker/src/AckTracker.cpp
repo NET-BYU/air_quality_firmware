@@ -443,6 +443,7 @@ bool AckTracker::confirmNext(uint32_t confirmCount)
     }
     writeHead(this->numFiles-1, this->head);
     (this->head)=head;
+    this->unconfirmed -= confirmCount;
     return true;
 }
 
