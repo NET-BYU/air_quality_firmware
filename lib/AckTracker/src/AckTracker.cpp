@@ -163,7 +163,11 @@ bool AckTracker::add(uint32_t id, uint16_t length, uint8_t *data)
 {
     if (this->needsSDSetup)
     {
-        this->begin();
+        if(!this->begin()) 
+        {
+            log.error("Could not start SD card.");
+            return false;
+        }
     }
     if (this->tail == ACK_TRACKER_MAX_ENTRIES)
     {
