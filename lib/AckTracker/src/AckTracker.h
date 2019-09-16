@@ -83,6 +83,8 @@ class AckTracker
         bool confirmNext();
         uint32_t getHead();
         uint32_t getTail();
+        bool rename();
+        
     protected:
         bool isValidIndex(uint32_t index);
         bool createBlankFile(uint8_t fileNum);
@@ -94,7 +96,7 @@ class AckTracker
         uint32_t getIndex(uint8_t fileNum, uint32_t offset);
         uint8_t getNumFiles();
         uint32_t getMaxEntriesPerFile();
-        bool rename();
+        
     private:
         bool needsSDSetup = true;
         Logger log;

@@ -784,6 +784,13 @@ int cloudParameters(String arg)
         return 0;
     }
 
+    if (strncmp(command, "renameAckTracker", commandLength) == 0)
+    {
+        Log.info("Renaming AckTracker file");
+        tracker.rename();
+        return 0;
+    }
+
     Log.error("No matching command: %s", argStr);
     return -1;
 }
