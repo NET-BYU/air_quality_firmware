@@ -339,6 +339,8 @@ bool AckTracker::get(uint32_t index, uint32_t &id, uint16_t &length, uint8_t *da
 //     *  */
 uint16_t AckTracker::getLength(uint32_t index)
 {
+    index += getHead();
+
     if (index > this->tail)
     {
         log.error("getLength() failed. Index too large.");
@@ -380,6 +382,8 @@ uint16_t AckTracker::getLength(uint32_t index)
 //     *  */
 uint32_t AckTracker::getID(uint32_t index)
 {
+    index += getHead();
+
     if (index > this->tail)
     {
         return ACK_TRACKER_ERROR32;

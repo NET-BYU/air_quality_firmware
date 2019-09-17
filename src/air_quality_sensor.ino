@@ -355,22 +355,27 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint32
 {
     Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
+    uint16_t item_length = 0;
     count = 0;
 
     // Figure out how many measurements can fit in to buffer
     while (total < maxLength && count < tracker.unconfirmedCount())
     {
-        total += tracker.getLength(count);
-        total += LENGTH_HEADER_SIZE;
+
+        item_length = tracker.getLength(count);
+        Log.info("Getting length of item %ld: %d", count, item_length);
+        total += item_length + LENGTH_HEADER_SIZE;
         count++;
     }
 
     if (total > maxLength)
     {
-        // This means we more unconfirmed measurements than we have room for, so take one less
+        // This means we have more unconfirmed measurements than we have room for
+        // We need to remove the last added measurement because its what put us over the edge
         count--;
-        total -= tracker.getLength(count);
-        total -= LENGTH_HEADER_SIZE;
+        item_length = tracker.getLength(count);
+        Log.info("Beyond max size (%ld > %ld), going back one measurement: %d.", total, maxLength, item_length);
+        total -= tracker.getLength(count) + LENGTH_HEADER_SIZE;
     }
 
     Log.info("Number of measurements: %ld (%ld)\n", count, total);
