@@ -792,7 +792,7 @@ int cloudParameters(String arg)
     if (strncmp(command, "renameAckTracker", commandLength) == 0)
     {
         Log.info("Renaming AckTracker file");
-        tracker.rename();
+        // TODO: Finish this
         return 0;
     }
 
