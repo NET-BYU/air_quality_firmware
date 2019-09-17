@@ -18,12 +18,12 @@
 
 #if PLATFORM_ID == PLATFORM_ARGON
 PRODUCT_ID(9901);
-PRODUCT_VERSION(2);
+PRODUCT_VERSION(3);
 #endif
 
 #if PLATFORM_ID == PLATFORM_BORON
 PRODUCT_ID(9861);
-PRODUCT_VERSION(1);
+PRODUCT_VERSION(2);
 #endif
 
 // Counters
@@ -40,7 +40,7 @@ const int SD_CHIP_SELECT = A5;
 
 // Write data points to SD card and keep track of what has been ackowledged
 AckTracker tracker(sd, SD_CHIP_SELECT, "data", 300);
-uint8_t pendingPublishes = 0;
+uint32_t pendingPublishes = 0;
 
 // PM Sensor
 SPS30 pmSensor;
@@ -351,29 +351,34 @@ bool connecting()
 #endif
 }
 
-void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
+void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint32_t &count)
 {
     Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
+    uint16_t item_length = 0;
     count = 0;
 
     // Figure out how many measurements can fit in to buffer
     while (total < maxLength && count < tracker.unconfirmedCount())
     {
-        total += tracker.getLength(count);
-        total += LENGTH_HEADER_SIZE;
+
+        item_length = tracker.getLength(count);
+        Log.info("Getting length of item %ld: %d", count, item_length);
+        total += item_length + LENGTH_HEADER_SIZE;
         count++;
     }
 
     if (total > maxLength)
     {
-        // This means we more unconfirmed measurements than we have room for, so take one less
+        // This means we have more unconfirmed measurements than we have room for
+        // We need to remove the last added measurement because its what put us over the edge
         count--;
-        total -= tracker.getLength(count);
-        total -= LENGTH_HEADER_SIZE;
+        item_length = tracker.getLength(count);
+        Log.info("Beyond max size (%ld > %ld), going back one measurement: %d.", total, maxLength, item_length);
+        total -= tracker.getLength(count) + LENGTH_HEADER_SIZE;
     }
 
-    Log.info("Number of measurements: %d (%ld)\n", count, total);
+    Log.info("Number of measurements: %ld (%ld)\n", count, total);
 
     // Copy over data into data buffers
     uint32_t offset = 0;
@@ -781,6 +786,13 @@ int cloudParameters(String arg)
         // Rather than casting to a float and dividing by 100, just for that function to multiply
         // by 100 and cast back into a uint_16, I am calling the underlying method directly.
         airSensor.sendCommand(COMMAND_SET_TEMPERATURE_OFFSET, value);
+        return 0;
+    }
+
+    if (strncmp(command, "renameAckTracker", commandLength) == 0)
+    {
+        Log.info("Renaming AckTracker file");
+        // TODO: Finish this
         return 0;
     }
 
