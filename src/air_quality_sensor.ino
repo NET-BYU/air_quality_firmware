@@ -133,6 +133,7 @@ void setup()
     {
         Log.error("Could not start tracker");
         success = false;
+        saveDataSucess = false;
     }
 
     if (!rtc.begin())
@@ -419,8 +420,8 @@ void readSensors(SensorPacket *packet)
         packet->has_rtc_temperature = true;
     }
 
-    // packet->card_present = saveDataSucess;
-    // packet->has_card_present = true;
+    packet->card_present = saveDataSucess;
+    packet->has_card_present = true;
 
     packet->queue_size = tracker.unconfirmedCount();
     packet->has_queue_size = true;
