@@ -40,7 +40,7 @@ const int SD_CHIP_SELECT = A5;
 
 // Write data points to SD card and keep track of what has been ackowledged
 AckTracker tracker(sd, SD_CHIP_SELECT, "data", 300);
-uint8_t pendingPublishes = 0;
+uint32_t pendingPublishes = 0;
 
 // PM Sensor
 SPS30 pmSensor;
@@ -351,7 +351,7 @@ bool connecting()
 #endif
 }
 
-void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_t &count)
+void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint32_t &count)
 {
     Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
@@ -373,7 +373,7 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint8_
         total -= LENGTH_HEADER_SIZE;
     }
 
-    Log.info("Number of measurements: %d (%ld)\n", count, total);
+    Log.info("Number of measurements: %ld (%ld)\n", count, total);
 
     // Copy over data into data buffers
     uint32_t offset = 0;
