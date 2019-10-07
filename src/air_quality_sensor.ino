@@ -41,13 +41,16 @@ const int SD_CHIP_SELECT = A5;
 // Write data points to SD card and keep track of what has been ackowledged
 AckTracker tracker(sd, SD_CHIP_SELECT, "data", 300);
 uint32_t pendingPublishes = 0;
+bool trackerSetup = true;
 
 // PM Sensor
 SPS30 pmSensor;
 float pmMeasurement[4];
+bool pmSensorSetup = true;
 
 // CO2 + Temp + Humidity Sensor
 SCD30 airSensor;
+bool airSensorSetup = true;
 
 // RTC
 RTC_DS3231 rtc;
@@ -66,6 +69,10 @@ int resetReason = RESET_REASON_NONE;
 // Publishing information
 particle::Future<bool> currentPublish;
 bool currentlyPublishing = false;
+
+// Flag for publishing status information
+bool publishStatus = false;
+bool publishingStatus = false;
 
 // LEDs
 auto bootLED = JLed(BOOT_LED);
@@ -134,6 +141,7 @@ void setup()
         Log.error("Could not start tracker");
         success = false;
         saveDataSucess = false;
+        trackerSetup = false;
     }
 
     if (!rtc.begin())
@@ -169,12 +177,14 @@ void setup()
     {
         Log.error("Could not start PM sensor!");
         success = false;
+        pmSensorSetup = false;
     }
 
     if (!airSensor.begin())
     {
         Log.error("Could not start CO2 sensor!");
         success = false;
+        airSensorSetup = false;
     }
 
     if (!success)
@@ -252,8 +262,16 @@ void loop()
         if (currentPublish.isSucceeded())
         {
             Log.info("Publication was successful!");
-            tracker.confirmNext(pendingPublishes);
-            Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
+            if (publishingStatus)
+            {
+                Log.info("Published status message");
+            }
+            else
+            {
+                tracker.confirmNext(pendingPublishes);
+                Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
+            }
+
             publishLED.Off().Update();
         }
         else
@@ -264,6 +282,27 @@ void loop()
 
         pendingPublishes = 0;
         currentlyPublishing = false;
+        publishingStatus = false;
+    }
+
+    if (publishStatus && !currentlyPublishing && Particle.connected())
+    {
+        StaticJsonDocument<200> doc;
+        doc["tracker"] = trackerSetup;
+        doc["rtc"] = rtcPresent;
+        doc["pm"] = pmSensorSetup;
+        doc["air"] = airSensorSetup;
+
+        char output[200];
+        serializeJson(doc, output, sizeof(output));
+
+        Log.info("Publishing status data: %s", output);
+        currentPublish = Particle.publish("mn/s", output, 60, PRIVATE, WITH_ACK);
+        currentlyPublishing = true;
+        publishingStatus = true;
+        publishLED.On().Update();
+
+        publishStatus = false;
     }
 
     // Upload data
@@ -650,6 +689,11 @@ int cloudParameters(String arg)
     }
 
     // Match command
+    if (strncmp(command, "setupStatus", commandLength) == 0)
+    {
+        publishStatus = true;
+        return 0;
+    }
     if (strncmp(command, "readPeriodMs", commandLength) == 0)
     {
         if (settingValue)
