@@ -39,7 +39,7 @@ SdFat sd;
 const int SD_CHIP_SELECT = A5;
 
 // Write data points to SD card and keep track of what has been ackowledged
-AckTracker tracker(sd, SD_CHIP_SELECT, "data", 300);
+AckTracker tracker(sd, SD_CHIP_SELECT, 300);
 uint32_t pendingPublishes = 0;
 bool trackerSetup = true;
 
@@ -269,7 +269,15 @@ void loop()
             else
             {
                 tracker.confirmNext(pendingPublishes);
-                Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
+                uint32_t unconfirmedCount;
+                if (tracker.unconfirmedCount(&unconfirmedCount))
+                {
+                    Log.info("Unconfirmed count: %ld", unconfirmedCount);
+                }
+                else
+                {
+                    Log.error("Unable to get unconfirmed count");
+                }
             }
 
             publishLED.Off().Update();
@@ -308,25 +316,28 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
+        uint32_t unconfirmedCount = 0;
+        tracker.unconfirmedCount(&unconfirmedCount);
+
         Log.trace("Trying to upload data... (%d, %d, %ld >= %ld (%d))",
                   !currentlyPublishing,
                   Particle.connected(),
-                  tracker.unconfirmedCount(),
+                  unconfirmedCount,
                   config.data.uploadBatchSize,
-                  tracker.unconfirmedCount() >= config.data.uploadBatchSize);
-        if (!currentlyPublishing && Particle.connected() && (tracker.unconfirmedCount() >= config.data.uploadBatchSize))
+                  unconfirmedCount >= config.data.uploadBatchSize);
+        if (!currentlyPublishing && Particle.connected() && (unconfirmedCount >= config.data.uploadBatchSize))
         {
             // TODO: Should do the ceiling of the division just to be safe
             uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // Account for overhead of base85 encoding
             uint8_t data[maxLength];
             uint32_t dataLength;
-            getMeasurements(data, maxLength, dataLength, pendingPublishes);
+            getMeasurements(data, maxLength, &dataLength, &pendingPublishes);
 
             uint8_t encodedData[config.data.maxPubSize];
             uint32_t encodedDataLength;
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
-            Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
+            Log.info("Unconfirmed count: %ld", unconfirmedCount);
             Log.info("Publishing data: %s", (char *)encodedData);
             currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
@@ -391,19 +402,21 @@ bool connecting()
 #endif
 }
 
-void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint32_t &count)
+void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32_t *count)
 {
     Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
     uint16_t item_length = 0;
-    count = 0;
+    *count = 0;
 
     // Figure out how many measurements can fit in to buffer
-    while (total < maxLength && count < tracker.unconfirmedCount())
+    uint32_t unconfirmedCount = 0;
+    tracker.unconfirmedCount(&unconfirmedCount);
+    while (total < maxLength && *count < unconfirmedCount)
     {
 
-        item_length = tracker.getLength(count);
-        Log.info("Getting length of item %ld: %d", count, item_length);
+        tracker.getLength(*count, &item_length);
+        Log.info("Getting length of item %ld: %d", *count, item_length);
         total += item_length + LENGTH_HEADER_SIZE;
         count++;
     }
@@ -412,29 +425,29 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint32
     {
         // This means we have more unconfirmed measurements than we have room for
         // We need to remove the last added measurement because its what put us over the edge
-        count--;
-        item_length = tracker.getLength(count);
+        (*count)--;
+        tracker.getLength(*count, &item_length);
         Log.info("Beyond max size (%ld > %ld), going back one measurement: %d.", total, maxLength, item_length);
-        total -= tracker.getLength(count) + LENGTH_HEADER_SIZE;
+        total -= item_length + LENGTH_HEADER_SIZE;
     }
 
-    Log.info("Number of measurements: %ld (%ld)\n", count, total);
+    Log.info("Number of measurements: %ld (%ld)\n", *count, total);
 
     // Copy over data into data buffers
     uint32_t offset = 0;
-    for (uint32_t i = 0; i < count; i++)
+    for (uint32_t i = 0; i < *count; i++)
     {
         uint32_t id;
         uint16_t item_length;
-        tracker.get(i, id, item_length, data + offset + LENGTH_HEADER_SIZE);
+        tracker.get(i, &id, &item_length, data + offset + LENGTH_HEADER_SIZE);
         Log.info("Getting data from AckTracker (%lu, %lu, %u)", i, id, item_length);
         data[offset] = (uint8_t)item_length;
         data[offset + 1] = (uint8_t)(item_length >> 8);
         offset += item_length + LENGTH_HEADER_SIZE;
     }
 
-    length = offset;
-    Log.info("Length of data: %ld", length);
+    *length = offset;
+    Log.info("Length of data: %ld", *length);
 }
 
 void readSensors(SensorPacket *packet)
@@ -462,8 +475,12 @@ void readSensors(SensorPacket *packet)
     packet->card_present = saveDataSucess;
     packet->has_card_present = true;
 
-    packet->queue_size = tracker.unconfirmedCount();
-    packet->has_queue_size = true;
+    uint32_t unconfirmedCount;
+    if (tracker.unconfirmedCount(&unconfirmedCount))
+    {
+        packet->queue_size = unconfirmedCount;
+        packet->has_queue_size = true;
+    }
 
     if (pmSensor.dataAvailable())
     {
