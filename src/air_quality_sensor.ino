@@ -407,35 +407,35 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
     Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
     uint16_t item_length = 0;
-    *count = 0;
+    uint32_t tmpCount = 0;
 
     // Figure out how many measurements can fit in to buffer
     uint32_t unconfirmedCount = 0;
     tracker.unconfirmedCount(&unconfirmedCount);
-    while (total < maxLength && *count < unconfirmedCount)
+    while (total < maxLength && tmpCount < unconfirmedCount)
     {
 
-        tracker.getLength(*count, &item_length);
-        Log.info("Getting length of item %ld: %d", *count, item_length);
+        tracker.getLength(tmpCount, &item_length);
+        Log.info("Getting length of item %ld: %d", tmpCount, item_length);
         total += item_length + LENGTH_HEADER_SIZE;
-        count++;
+        tmpCount++;
     }
 
     if (total > maxLength)
     {
         // This means we have more unconfirmed measurements than we have room for
         // We need to remove the last added measurement because its what put us over the edge
-        (*count)--;
-        tracker.getLength(*count, &item_length);
+        tmpCount--;
+        tracker.getLength(tmpCount, &item_length);
         Log.info("Beyond max size (%ld > %ld), going back one measurement: %d.", total, maxLength, item_length);
         total -= item_length + LENGTH_HEADER_SIZE;
     }
 
-    Log.info("Number of measurements: %ld (%ld)\n", *count, total);
+    Log.info("Number of measurements: %ld (%ld)\n", tmpCount, total);
 
     // Copy over data into data buffers
     uint32_t offset = 0;
-    for (uint32_t i = 0; i < *count; i++)
+    for (uint32_t i = 0; i < tmpCount; i++)
     {
         uint32_t id;
         uint16_t item_length;
@@ -447,6 +447,7 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
     }
 
     *length = offset;
+    *count = tmpCount;
     Log.info("Length of data: %ld", *length);
 }
 
