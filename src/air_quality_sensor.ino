@@ -490,7 +490,7 @@ void readSensors(SensorPacket *packet)
         packet->has_co2 = true;
 
         float temp = airSensor.getTemperature();
-        packet->temperature = (uint32_t)round(temp * 10);
+        packet->temperature = (int32_t)round(temp * 10);
         packet->has_temperature = true;
 
         float humidity = airSensor.getHumidity();
