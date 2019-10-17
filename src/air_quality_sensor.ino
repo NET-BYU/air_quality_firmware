@@ -111,7 +111,8 @@ SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVE
 #else
 SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
                                              {"app.encode", LOG_LEVEL_INFO},
-                                             {"AckTracker", LOG_LEVEL_INFO}});
+                                             {"FileAckTracker", LOG_LEVEL_INFO},
+                                             {"MemoryAckTracker", LOG_LEVEL_TRACE}});
 #endif
 
 // Particle system stuff
@@ -142,7 +143,7 @@ void setup()
 
     if (!fileTracker.begin())
     {
-        Log.error("Could not start tracker");
+        Log.error("Could not start file tracker");
         success = false;
         saveDataSucess = false;
         trackerSetup = false;
@@ -404,8 +405,6 @@ void loop()
 // MemoryAckTracker or vice versa.
 void checkAckTracker()
 {
-    Log.info("Using FileAckTracker: %d", tracker == &fileTracker);
-    Log.info("FileAckTracker working: %d", fileTracker.begin());
     if (tracker == &fileTracker)
     {
         if (!fileTracker.begin())
@@ -422,10 +421,9 @@ void checkAckTracker()
     {
         uint32_t unconfirmedCount;
         memoryTracker.unconfirmedCount(&unconfirmedCount);
-        Log.info("Unconfirmed count for memoryTracker: %ld", unconfirmedCount);
         if (unconfirmedCount > 0)
         {
-            Log.info("MemoryAckTracker has unconfirmed messages so not trying to switch.");
+            Log.info("MemoryAckTracker has unconfirmed messages so not trying to switch (%ld).", unconfirmedCount);
         }
         else if (fileTracker.begin())
         {
