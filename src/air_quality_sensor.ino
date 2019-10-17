@@ -257,6 +257,24 @@ void loop()
             }
             else
             {
+                Log.warn("Failed to add data to tracker");
+                if (tracker == &fileTracker)
+                {
+                    Log.warn("Switching to MemoryAckTracker");
+                    tracker = &memoryTracker;
+                    if (tracker->add(packet.sequence, length, data))
+                    {
+                        Log.info("Data was successfully added to MemoryAckTracker");
+                        saveDataSucess = true;
+                        readLED.Off().Update();
+                    }
+                    else
+                    {
+                        Log.warn("Failed to add data to memoryTracker");
+                        saveDataSucess = false;
+                        readLED.Blink(250, 250).Forever();
+                    }
+                }
                 saveDataSucess = false;
                 readLED.Blink(250, 250).Forever();
             }
