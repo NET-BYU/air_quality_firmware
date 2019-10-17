@@ -438,7 +438,7 @@ void checkAckTracker()
         }
         else if (fileTracker.begin())
         {
-            Log.warn("FileAckTracker is working now – switching to it.");
+            Log.warn("FileAckTracker is working now -- switching to it.");
             tracker = &fileTracker;
         }
         else
