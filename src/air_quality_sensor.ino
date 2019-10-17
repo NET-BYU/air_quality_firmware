@@ -4,6 +4,8 @@
 #include "RTClibrary.h"
 #include "sensor_packet.pb.h"
 #include "AckTracker.h"
+#include "FileAckTracker.h"
+#include "MemoryAckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
 #include "ArduinoJson.h"
@@ -39,7 +41,9 @@ SdFat sd;
 const int SD_CHIP_SELECT = A5;
 
 // Write data points to SD card and keep track of what has been ackowledged
-AckTracker tracker(sd, SD_CHIP_SELECT, 300);
+FileAckTracker fileTracker(sd, SD_CHIP_SELECT, 300);
+MemoryAckTracker<300, 60> memTracker;
+AckTracker *tracker;
 uint32_t pendingPublishes = 0;
 bool trackerSetup = true;
 
@@ -136,12 +140,23 @@ void setup()
 
     delay(5000);
 
-    if (!tracker.begin())
+    if (!fileTracker.begin())
     {
         Log.error("Could not start tracker");
         success = false;
         saveDataSucess = false;
         trackerSetup = false;
+    }
+
+    if (trackerSetup)
+    {
+        Log.info("Using file tracker");
+        tracker = &fileTracker;
+    }
+    else
+    {
+        Log.info("Using memory tracker");
+        tracker = &memTracker;
     }
 
     if (!rtc.begin())
@@ -234,7 +249,7 @@ void loop()
         if (packMeasurement(&packet, SensorPacket_size, data, &length))
         {
             Log.info("Adding data to tracker (%d)...", length);
-            if (tracker.add(packet.sequence, length, data))
+            if (tracker->add(packet.sequence, length, data))
             {
                 saveDataSucess = true;
                 readLED.Off().Update();
@@ -268,9 +283,9 @@ void loop()
             }
             else
             {
-                tracker.confirmNext(pendingPublishes);
+                tracker->confirmNext(pendingPublishes);
                 uint32_t unconfirmedCount;
-                if (tracker.unconfirmedCount(&unconfirmedCount))
+                if (tracker->unconfirmedCount(&unconfirmedCount))
                 {
                     Log.info("Unconfirmed count: %ld", unconfirmedCount);
                 }
@@ -317,7 +332,7 @@ void loop()
     if (uploadFlag)
     {
         uint32_t unconfirmedCount = 0;
-        tracker.unconfirmedCount(&unconfirmedCount);
+        tracker->unconfirmedCount(&unconfirmedCount);
 
         Log.trace("Trying to upload data... (%d, %d, %ld >= %ld (%d))",
                   !currentlyPublishing,
@@ -411,11 +426,11 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
 
     // Figure out how many measurements can fit in to buffer
     uint32_t unconfirmedCount = 0;
-    tracker.unconfirmedCount(&unconfirmedCount);
+    tracker->unconfirmedCount(&unconfirmedCount);
     while (total < maxLength && tmpCount < unconfirmedCount)
     {
 
-        tracker.getLength(tmpCount, &item_length);
+        tracker->getLength(tmpCount, &item_length);
         Log.info("Getting length of item %ld: %d", tmpCount, item_length);
         total += item_length + LENGTH_HEADER_SIZE;
         tmpCount++;
@@ -426,7 +441,7 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
         // This means we have more unconfirmed measurements than we have room for
         // We need to remove the last added measurement because its what put us over the edge
         tmpCount--;
-        tracker.getLength(tmpCount, &item_length);
+        tracker->getLength(tmpCount, &item_length);
         Log.info("Beyond max size (%ld > %ld), going back one measurement: %d.", total, maxLength, item_length);
         total -= item_length + LENGTH_HEADER_SIZE;
     }
@@ -439,7 +454,7 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
     {
         uint32_t id;
         uint16_t item_length;
-        tracker.get(i, &id, &item_length, data + offset + LENGTH_HEADER_SIZE);
+        tracker->get(i, &id, &item_length, data + offset + LENGTH_HEADER_SIZE);
         Log.info("Getting data from AckTracker (%lu, %lu, %u)", i, id, item_length);
         data[offset] = (uint8_t)item_length;
         data[offset + 1] = (uint8_t)(item_length >> 8);
@@ -477,7 +492,7 @@ void readSensors(SensorPacket *packet)
     packet->has_card_present = true;
 
     uint32_t unconfirmedCount;
-    if (tracker.unconfirmedCount(&unconfirmedCount))
+    if (tracker->unconfirmedCount(&unconfirmedCount))
     {
         packet->queue_size = unconfirmedCount;
         packet->has_queue_size = true;
@@ -855,7 +870,7 @@ int cloudParameters(String arg)
     if (strncmp(command, "startNewAckTracker", commandLength) == 0)
     {
         Log.info("Renaming AckTracker file");
-        return tracker.startNewFile() ? 0 : -1;
+        return fileTracker.startNewFile() ? 0 : -1;
     }
 
     Log.error("No matching command: %s", argStr);
