@@ -67,7 +67,6 @@ char energyMeterData[ENERGY_METER_DATA_SIZE];
 bool newEnergyMeterData = false;
 
 // Global variables to keep track of state
-bool saveDataSucess = true;
 int resetReason = RESET_REASON_NONE;
 
 // Publishing information
@@ -145,7 +144,6 @@ void setup()
     {
         Log.error("Could not start file tracker");
         success = false;
-        saveDataSucess = false;
         trackerSetup = false;
     }
 
@@ -252,7 +250,6 @@ void loop()
             Log.info("Adding data to tracker (%d)...", length);
             if (tracker->add(packet.sequence, length, data))
             {
-                saveDataSucess = true;
                 readLED.Off().Update();
             }
             else
@@ -265,24 +262,20 @@ void loop()
                     if (tracker->add(packet.sequence, length, data))
                     {
                         Log.info("Data was successfully added to MemoryAckTracker");
-                        saveDataSucess = true;
                         readLED.Off().Update();
                     }
                     else
                     {
                         Log.warn("Failed to add data to memoryTracker");
-                        saveDataSucess = false;
                         readLED.Blink(250, 250).Forever();
                     }
                 }
-                saveDataSucess = false;
                 readLED.Blink(250, 250).Forever();
             }
         }
         else
         {
             Log.error("Packing measurement FAILED!");
-            saveDataSucess = false;
             readLED.Blink(250, 250).Forever();
         }
 
@@ -545,7 +538,7 @@ void readSensors(SensorPacket *packet)
         packet->has_rtc_temperature = true;
     }
 
-    packet->card_present = saveDataSucess;
+    packet->card_present = tracker == &fileTracker;
     packet->has_card_present = true;
 
     uint32_t unconfirmedCount;
