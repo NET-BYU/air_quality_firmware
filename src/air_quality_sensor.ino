@@ -42,7 +42,7 @@ const int SD_CHIP_SELECT = A5;
 
 // Write data points to SD card and keep track of what has been ackowledged
 FileAckTracker fileTracker(sd, SD_CHIP_SELECT, 300);
-MemoryAckTracker<300, 60> memTracker;
+MemoryAckTracker<300, 60> memoryTracker;
 AckTracker *tracker;
 uint32_t pendingPublishes = 0;
 bool trackerSetup = true;
@@ -156,7 +156,7 @@ void setup()
     else
     {
         Log.info("Using memory tracker");
-        tracker = &memTracker;
+        tracker = &memoryTracker;
     }
 
     if (!rtc.begin())
@@ -293,6 +293,8 @@ void loop()
                 {
                     Log.error("Unable to get unconfirmed count");
                 }
+
+                checkAckTracker();
             }
 
             publishLED.Off().Update();
@@ -396,6 +398,45 @@ void loop()
     bootLED.Update();
     readLED.Update();
     publishLED.Update();
+}
+
+// Checks to see if we should switch from the FileAckTracker to
+// MemoryAckTracker or vice versa.
+void checkAckTracker()
+{
+    Log.info("Using FileAckTracker: %d", tracker == &fileTracker);
+    Log.info("FileAckTracker working: %d", fileTracker.begin());
+    if (tracker == &fileTracker)
+    {
+        if (!fileTracker.begin())
+        {
+            Log.warn("FileAckTracker is not working — switching to MemoryAckTracker.");
+            tracker = &memoryTracker;
+        }
+        else
+        {
+            Log.info("FileAckTracker is working.");
+        }
+    }
+    else
+    {
+        uint32_t unconfirmedCount;
+        memoryTracker.unconfirmedCount(&unconfirmedCount);
+        Log.info("Unconfirmed count for memoryTracker: %ld", unconfirmedCount);
+        if (unconfirmedCount > 0)
+        {
+            Log.info("MemoryAckTracker has unconfirmed messages so not trying to switch.");
+        }
+        else if (fileTracker.begin())
+        {
+            Log.warn("FileAckTracker is working now – switching to it.");
+            tracker = &fileTracker;
+        }
+        else
+        {
+            Log.info("FileAckTracker is still not working. Keep using MemoryAckTracker.");
+        }
+    }
 }
 
 void serialEvent1()
