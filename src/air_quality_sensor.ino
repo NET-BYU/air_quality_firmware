@@ -4,6 +4,8 @@
 #include "RTClibrary.h"
 #include "sensor_packet.pb.h"
 #include "AckTracker.h"
+#include "FileAckTracker.h"
+#include "MemoryAckTracker.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "SPS30.h"
 #include "ArduinoJson.h"
@@ -39,7 +41,10 @@ SdFat sd;
 const int SD_CHIP_SELECT = A5;
 
 // Write data points to SD card and keep track of what has been ackowledged
-AckTracker tracker(sd, SD_CHIP_SELECT, "data", 300);
+#define ENTRY_SIZE 300
+FileAckTracker fileTracker(sd, SD_CHIP_SELECT, ENTRY_SIZE);
+MemoryAckTracker<ENTRY_SIZE, 60> memoryTracker;
+AckTracker *currentTracker;
 uint32_t pendingPublishes = 0;
 bool trackerSetup = true;
 
@@ -63,7 +68,6 @@ char energyMeterData[ENERGY_METER_DATA_SIZE];
 bool newEnergyMeterData = false;
 
 // Global variables to keep track of state
-bool saveDataSucess = true;
 int resetReason = RESET_REASON_NONE;
 
 // Publishing information
@@ -107,7 +111,8 @@ SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVE
 #else
 SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
                                              {"app.encode", LOG_LEVEL_INFO},
-                                             {"AckTracker", LOG_LEVEL_INFO}});
+                                             {"FileAckTracker", LOG_LEVEL_INFO},
+                                             {"MemoryAckTracker", LOG_LEVEL_TRACE}});
 #endif
 
 // Particle system stuff
@@ -136,12 +141,17 @@ void setup()
 
     delay(5000);
 
-    if (!tracker.begin())
+    if (!fileTracker.begin())
     {
-        Log.error("Could not start tracker");
+        Log.error("Could not start file tracker. Using memory tracker");
         success = false;
-        saveDataSucess = false;
         trackerSetup = false;
+        currentTracker = &memoryTracker;
+    }
+    else
+    {
+        Log.info("Using file tracker.");
+        currentTracker = &fileTracker;
     }
 
     if (!rtc.begin())
@@ -234,21 +244,35 @@ void loop()
         if (packMeasurement(&packet, SensorPacket_size, data, &length))
         {
             Log.info("Adding data to tracker (%d)...", length);
-            if (tracker.add(packet.sequence, length, data))
+            AckTracker *tracker = getAckTrackerForWriting();
+            if (tracker->add(packet.sequence, length, data))
             {
-                saveDataSucess = true;
                 readLED.Off().Update();
             }
             else
             {
-                saveDataSucess = false;
+                Log.warn("Failed to add data to tracker");
+                if (tracker == &fileTracker)
+                {
+                    Log.warn("Switching to MemoryAckTracker");
+                    tracker = &memoryTracker;
+                    if (tracker->add(packet.sequence, length, data))
+                    {
+                        Log.info("Data was successfully added to MemoryAckTracker");
+                        readLED.Off().Update();
+                    }
+                    else
+                    {
+                        Log.warn("Failed to add data to memoryTracker");
+                        readLED.Blink(250, 250).Forever();
+                    }
+                }
                 readLED.Blink(250, 250).Forever();
             }
         }
         else
         {
             Log.error("Packing measurement FAILED!");
-            saveDataSucess = false;
             readLED.Blink(250, 250).Forever();
         }
 
@@ -268,8 +292,17 @@ void loop()
             }
             else
             {
-                tracker.confirmNext(pendingPublishes);
-                Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
+                AckTracker *tracker = getAckTrackerForReading();
+                tracker->confirmNext(pendingPublishes);
+                uint32_t unconfirmedCount;
+                if (tracker->unconfirmedCount(&unconfirmedCount))
+                {
+                    Log.info("Unconfirmed count: %ld", unconfirmedCount);
+                }
+                else
+                {
+                    Log.error("Unable to get unconfirmed count");
+                }
             }
 
             publishLED.Off().Update();
@@ -308,25 +341,29 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
+        AckTracker *tracker = getAckTrackerForReading();
+        uint32_t unconfirmedCount = 0;
+        tracker->unconfirmedCount(&unconfirmedCount);
+
         Log.trace("Trying to upload data... (%d, %d, %ld >= %ld (%d))",
                   !currentlyPublishing,
                   Particle.connected(),
-                  tracker.unconfirmedCount(),
+                  unconfirmedCount,
                   config.data.uploadBatchSize,
-                  tracker.unconfirmedCount() >= config.data.uploadBatchSize);
-        if (!currentlyPublishing && Particle.connected() && (tracker.unconfirmedCount() >= config.data.uploadBatchSize))
+                  unconfirmedCount >= config.data.uploadBatchSize);
+        if (!currentlyPublishing && Particle.connected() && (unconfirmedCount >= config.data.uploadBatchSize))
         {
             // TODO: Should do the ceiling of the division just to be safe
             uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // Account for overhead of base85 encoding
             uint8_t data[maxLength];
             uint32_t dataLength;
-            getMeasurements(data, maxLength, dataLength, pendingPublishes);
+            getMeasurements(data, maxLength, &dataLength, &pendingPublishes, tracker);
 
             uint8_t encodedData[config.data.maxPubSize];
             uint32_t encodedDataLength;
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
-            Log.info("Unconfirmed count: %ld", tracker.unconfirmedCount());
+            Log.info("Unconfirmed count: %ld", unconfirmedCount);
             Log.info("Publishing data: %s", (char *)encodedData);
             currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
@@ -372,6 +409,75 @@ void loop()
     publishLED.Update();
 }
 
+AckTracker *getAckTrackerForWriting()
+{
+    Log.info("Getting AckTracker for writing...");
+    if (fileTracker.begin())
+    {
+        Log.info("Using fileTracker");
+        return &fileTracker;
+    }
+    else
+    {
+        Log.info("Using memoryTracker");
+        return &memoryTracker;
+    }
+}
+
+AckTracker *getAckTrackerForReading()
+{
+    Log.info("Getting AckTracker for reading...");
+    if (currentlyPublishing)
+    {
+        Log.info("Currently publishing so keep the same AckTracker.");
+        return currentTracker;
+    }
+
+    if (!fileTracker.begin())
+    {
+        Log.info("Unable to start fileTracker so using memoryTracker.");
+        currentTracker = &memoryTracker;
+        return currentTracker;
+    }
+
+    Log.info("Using fileTracker");
+    currentTracker = &fileTracker;
+
+    uint32_t memoryUnconfirmedCount = 0;
+    memoryTracker.unconfirmedCount(&memoryUnconfirmedCount);
+
+    if (memoryUnconfirmedCount == 0)
+    {
+        return currentTracker;
+    }
+
+    Log.info("Copying over %lu entries from memoryTracker to fileTracker", memoryUnconfirmedCount);
+    uint32_t id;
+    uint16_t length;
+    uint8_t data[ENTRY_SIZE];
+    for (uint32_t i = 0; i < memoryUnconfirmedCount; i++)
+    {
+        if (!memoryTracker.get(0, &id, &length, data))
+        {
+            Log.error("Unable to get %lu entry from memoryTracker", i);
+            break;
+        }
+
+        if (fileTracker.add(id, length, data))
+        {
+            Log.info("Copied over an entry");
+            memoryTracker.confirmNext(1);
+        }
+        else
+        {
+            Log.info("Unable to add entry to fileTracker");
+            break;
+        }
+    }
+
+    return currentTracker;
+}
+
 void serialEvent1()
 {
     serialLog.info("SerialEvent1!");
@@ -391,50 +497,53 @@ bool connecting()
 #endif
 }
 
-void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t &length, uint32_t &count)
+void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32_t *count, AckTracker *tracker)
 {
     Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
     uint16_t item_length = 0;
-    count = 0;
+    uint32_t tmpCount = 0;
 
     // Figure out how many measurements can fit in to buffer
-    while (total < maxLength && count < tracker.unconfirmedCount())
+    uint32_t unconfirmedCount = 0;
+    tracker->unconfirmedCount(&unconfirmedCount);
+    while (total < maxLength && tmpCount < unconfirmedCount)
     {
 
-        item_length = tracker.getLength(count);
-        Log.info("Getting length of item %ld: %d", count, item_length);
+        tracker->getLength(tmpCount, &item_length);
+        Log.info("Getting length of item %ld: %d", tmpCount, item_length);
         total += item_length + LENGTH_HEADER_SIZE;
-        count++;
+        tmpCount++;
     }
 
     if (total > maxLength)
     {
         // This means we have more unconfirmed measurements than we have room for
         // We need to remove the last added measurement because its what put us over the edge
-        count--;
-        item_length = tracker.getLength(count);
+        tmpCount--;
+        tracker->getLength(tmpCount, &item_length);
         Log.info("Beyond max size (%ld > %ld), going back one measurement: %d.", total, maxLength, item_length);
-        total -= tracker.getLength(count) + LENGTH_HEADER_SIZE;
+        total -= item_length + LENGTH_HEADER_SIZE;
     }
 
-    Log.info("Number of measurements: %ld (%ld)\n", count, total);
+    Log.info("Number of measurements: %ld (%ld)\n", tmpCount, total);
 
     // Copy over data into data buffers
     uint32_t offset = 0;
-    for (uint32_t i = 0; i < count; i++)
+    for (uint32_t i = 0; i < tmpCount; i++)
     {
         uint32_t id;
         uint16_t item_length;
-        tracker.get(i, id, item_length, data + offset + LENGTH_HEADER_SIZE);
+        tracker->get(i, &id, &item_length, data + offset + LENGTH_HEADER_SIZE);
         Log.info("Getting data from AckTracker (%lu, %lu, %u)", i, id, item_length);
         data[offset] = (uint8_t)item_length;
         data[offset + 1] = (uint8_t)(item_length >> 8);
         offset += item_length + LENGTH_HEADER_SIZE;
     }
 
-    length = offset;
-    Log.info("Length of data: %ld", length);
+    *length = offset;
+    *count = tmpCount;
+    Log.info("Length of data: %ld", *length);
 }
 
 void readSensors(SensorPacket *packet)
@@ -459,11 +568,15 @@ void readSensors(SensorPacket *packet)
         packet->has_rtc_temperature = true;
     }
 
-    packet->card_present = saveDataSucess;
+    packet->card_present = currentTracker == &fileTracker;
     packet->has_card_present = true;
 
-    packet->queue_size = tracker.unconfirmedCount();
-    packet->has_queue_size = true;
+    uint32_t unconfirmedCount;
+    if (currentTracker->unconfirmedCount(&unconfirmedCount))
+    {
+        packet->queue_size = unconfirmedCount;
+        packet->has_queue_size = true;
+    }
 
     if (pmSensor.dataAvailable())
     {
@@ -834,11 +947,10 @@ int cloudParameters(String arg)
         return 0;
     }
 
-    if (strncmp(command, "renameAckTracker", commandLength) == 0)
+    if (strncmp(command, "startNewAckTracker", commandLength) == 0)
     {
         Log.info("Renaming AckTracker file");
-        // TODO: Finish this
-        return 0;
+        return fileTracker.startNewFile() ? 0 : -1;
     }
 
     Log.error("No matching command: %s", argStr);
