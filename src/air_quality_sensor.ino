@@ -41,9 +41,10 @@ SdFat sd;
 const int SD_CHIP_SELECT = A5;
 
 // Write data points to SD card and keep track of what has been ackowledged
-FileAckTracker fileTracker(sd, SD_CHIP_SELECT, 300);
-MemoryAckTracker<300, 60> memoryTracker;
-AckTracker *tracker;
+#define ENTRY_SIZE 300
+FileAckTracker fileTracker(sd, SD_CHIP_SELECT, ENTRY_SIZE);
+MemoryAckTracker<ENTRY_SIZE, 60> memoryTracker;
+AckTracker *currentTracker;
 uint32_t pendingPublishes = 0;
 bool trackerSetup = true;
 
@@ -142,20 +143,15 @@ void setup()
 
     if (!fileTracker.begin())
     {
-        Log.error("Could not start file tracker");
+        Log.error("Could not start file tracker. Using memory tracker");
         success = false;
         trackerSetup = false;
-    }
-
-    if (trackerSetup)
-    {
-        Log.info("Using file tracker");
-        tracker = &fileTracker;
+        currentTracker = &memoryTracker;
     }
     else
     {
-        Log.info("Using memory tracker");
-        tracker = &memoryTracker;
+        Log.info("Using file tracker.");
+        currentTracker = &fileTracker;
     }
 
     if (!rtc.begin())
@@ -248,6 +244,7 @@ void loop()
         if (packMeasurement(&packet, SensorPacket_size, data, &length))
         {
             Log.info("Adding data to tracker (%d)...", length);
+            AckTracker *tracker = getAckTrackerForWriting();
             if (tracker->add(packet.sequence, length, data))
             {
                 readLED.Off().Update();
@@ -295,6 +292,7 @@ void loop()
             }
             else
             {
+                AckTracker *tracker = getAckTrackerForReading();
                 tracker->confirmNext(pendingPublishes);
                 uint32_t unconfirmedCount;
                 if (tracker->unconfirmedCount(&unconfirmedCount))
@@ -305,8 +303,6 @@ void loop()
                 {
                     Log.error("Unable to get unconfirmed count");
                 }
-
-                checkAckTracker();
             }
 
             publishLED.Off().Update();
@@ -345,6 +341,7 @@ void loop()
     // Upload data
     if (uploadFlag)
     {
+        AckTracker *tracker = getAckTrackerForReading();
         uint32_t unconfirmedCount = 0;
         tracker->unconfirmedCount(&unconfirmedCount);
 
@@ -360,7 +357,7 @@ void loop()
             uint32_t maxLength = config.data.maxPubSize - (config.data.maxPubSize / 4); // Account for overhead of base85 encoding
             uint8_t data[maxLength];
             uint32_t dataLength;
-            getMeasurements(data, maxLength, &dataLength, &pendingPublishes);
+            getMeasurements(data, maxLength, &dataLength, &pendingPublishes, tracker);
 
             uint8_t encodedData[config.data.maxPubSize];
             uint32_t encodedDataLength;
@@ -412,40 +409,73 @@ void loop()
     publishLED.Update();
 }
 
-// Checks to see if we should switch from the FileAckTracker to
-// MemoryAckTracker or vice versa.
-void checkAckTracker()
+AckTracker *getAckTrackerForWriting()
 {
-    if (tracker == &fileTracker)
+    Log.info("Getting AckTracker for writing...");
+    if (fileTracker.begin())
     {
-        if (!fileTracker.begin())
-        {
-            Log.warn("FileAckTracker is not working — switching to MemoryAckTracker.");
-            tracker = &memoryTracker;
-        }
-        else
-        {
-            Log.info("FileAckTracker is working.");
-        }
+        Log.info("Using fileTracker");
+        return &fileTracker;
     }
     else
     {
-        uint32_t unconfirmedCount;
-        memoryTracker.unconfirmedCount(&unconfirmedCount);
-        if (unconfirmedCount > 0)
+        Log.info("Using memoryTracker");
+        return &memoryTracker;
+    }
+}
+
+AckTracker *getAckTrackerForReading()
+{
+    Log.info("Getting AckTracker for reading...");
+    if (currentlyPublishing)
+    {
+        Log.info("Currently publishing so keep the same AckTracker.");
+        return currentTracker;
+    }
+
+    if (!fileTracker.begin())
+    {
+        Log.info("Unable to start fileTracker so using memoryTracker.");
+        currentTracker = &memoryTracker;
+        return currentTracker;
+    }
+
+    Log.info("Using fileTracker");
+    currentTracker = &fileTracker;
+
+    uint32_t memoryUnconfirmedCount = 0;
+    memoryTracker.unconfirmedCount(&memoryUnconfirmedCount);
+
+    if (memoryUnconfirmedCount == 0)
+    {
+        return currentTracker;
+    }
+
+    Log.info("Copying over %lu entries from memoryTracker to fileTracker", memoryUnconfirmedCount);
+    uint32_t id;
+    uint16_t length;
+    uint8_t data[ENTRY_SIZE];
+    for (uint32_t i = 0; i < memoryUnconfirmedCount; i++)
+    {
+        if (!memoryTracker.get(0, &id, &length, data))
         {
-            Log.info("MemoryAckTracker has unconfirmed messages so not trying to switch (%ld).", unconfirmedCount);
+            Log.error("Unable to get %lu entry from memoryTracker", i);
+            break;
         }
-        else if (fileTracker.begin())
+
+        if (fileTracker.add(id, length, data))
         {
-            Log.warn("FileAckTracker is working now -- switching to it.");
-            tracker = &fileTracker;
+            Log.info("Copied over an entry");
+            memoryTracker.confirmNext(1);
         }
         else
         {
-            Log.info("FileAckTracker is still not working. Keep using MemoryAckTracker.");
+            Log.info("Unable to add entry to fileTracker");
+            break;
         }
     }
+
+    return currentTracker;
 }
 
 void serialEvent1()
@@ -467,7 +497,7 @@ bool connecting()
 #endif
 }
 
-void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32_t *count)
+void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32_t *count, AckTracker *tracker)
 {
     Log.info("Max length: %ld", maxLength);
     uint32_t total = 0;
@@ -538,11 +568,11 @@ void readSensors(SensorPacket *packet)
         packet->has_rtc_temperature = true;
     }
 
-    packet->card_present = tracker == &fileTracker;
+    packet->card_present = currentTracker == &fileTracker;
     packet->has_card_present = true;
 
     uint32_t unconfirmedCount;
-    if (tracker->unconfirmedCount(&unconfirmedCount))
+    if (currentTracker->unconfirmedCount(&unconfirmedCount))
     {
         packet->queue_size = unconfirmedCount;
         packet->has_queue_size = true;
