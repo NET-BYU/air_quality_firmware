@@ -253,7 +253,14 @@ void loop()
             AckTracker *tracker = getAckTrackerForWriting();
             if (tracker->add(packet.sequence, length, data))
             {
-                sdLed.Blink(1000, 1000).Update();
+                if (tracker == &fileTracker)
+                {
+                    sdLed.Blink(1000, 1000).Update();
+                }
+                else
+                {
+                    sdLed.Blink(400, 100).Repeat(5);
+                }
             }
             else
             {
@@ -265,7 +272,7 @@ void loop()
                     if (tracker->add(packet.sequence, length, data))
                     {
                         Log.info("Data was successfully added to MemoryAckTracker");
-                        sdLed.Blink(400, 100).Repeat(4).Update();
+                        sdLed.Blink(400, 100).Repeat(5);
                     }
                     else
                     {
