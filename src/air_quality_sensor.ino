@@ -14,10 +14,6 @@
 #include "SdFat.h"
 #include "SdCardLogHandlerRK.h"
 
-#define BOOT_LED D3
-#define READ_LED D4
-#define PUBLISH_LED D5
-
 #if PLATFORM_ID == PLATFORM_ARGON
 PRODUCT_ID(9901);
 PRODUCT_VERSION(3);
@@ -79,9 +75,9 @@ bool publishStatus = false;
 bool publishingStatus = false;
 
 // LEDs
-auto bootLED = JLed(BOOT_LED);
-auto readLED = JLed(READ_LED);
-auto publishLED = JLed(PUBLISH_LED);
+auto sensorLed = JLed(D3);
+auto sdLed = JLed(D4);
+auto cloudLed = JLed(D5);
 
 // Timers
 bool readDataFlag = true;
@@ -122,8 +118,6 @@ STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
 void setup()
 {
-    bool success = true;
-
     // Set up cloud functions
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
@@ -144,7 +138,6 @@ void setup()
     if (!fileTracker.begin())
     {
         Log.error("Could not start file tracker. Using memory tracker");
-        success = false;
         trackerSetup = false;
         currentTracker = &memoryTracker;
     }
@@ -157,7 +150,6 @@ void setup()
     if (!rtc.begin())
     {
         Log.error("Could not start RTC!");
-        success = false;
         rtcPresent = false;
     }
 
@@ -168,7 +160,6 @@ void setup()
     if (first == second)
     {
         Log.error("Could not start RTC!");
-        success = false;
         rtcPresent = false;
     }
     else
@@ -186,24 +177,13 @@ void setup()
     if (!pmSensor.begin())
     {
         Log.error("Could not start PM sensor!");
-        success = false;
         pmSensorSetup = false;
     }
 
     if (!airSensor.begin())
     {
         Log.error("Could not start CO2 sensor!");
-        success = false;
         airSensorSetup = false;
-    }
-
-    if (!success)
-    {
-        bootLED.Blink(500, 500).Forever();
-    }
-    else
-    {
-        bootLED.Blink(1000, 1000);
     }
 
 #if SD_LOGGING
@@ -231,7 +211,7 @@ void loop()
     // Read sensor task
     if (readDataFlag)
     {
-        readLED.On().Update();
+        sensorLed.Blink(1000, 1000).Update();
         Log.info("Reading sensors...");
         SensorPacket packet = SensorPacket_init_zero;
         readSensors(&packet);
@@ -247,7 +227,14 @@ void loop()
             AckTracker *tracker = getAckTrackerForWriting();
             if (tracker->add(packet.sequence, length, data))
             {
-                readLED.Off().Update();
+                if (tracker == &fileTracker)
+                {
+                    sdLed.Blink(1000, 1000).Update();
+                }
+                else
+                {
+                    sdLed.Blink(400, 100).Repeat(5);
+                }
             }
             else
             {
@@ -259,21 +246,24 @@ void loop()
                     if (tracker->add(packet.sequence, length, data))
                     {
                         Log.info("Data was successfully added to MemoryAckTracker");
-                        readLED.Off().Update();
+                        sdLed.Blink(400, 100).Repeat(5);
                     }
                     else
                     {
                         Log.warn("Failed to add data to memoryTracker");
-                        readLED.Blink(250, 250).Forever();
+                        sdLed.Blink(100, 100).Forever();
                     }
                 }
-                readLED.Blink(250, 250).Forever();
+                else
+                {
+                    sdLed.Blink(400, 400).Forever();
+                }
             }
         }
         else
         {
             Log.error("Packing measurement FAILED!");
-            readLED.Blink(250, 250).Forever();
+            sdLed.Blink(1600, 1600).Forever();
         }
 
         sequence.increment();
@@ -305,12 +295,12 @@ void loop()
                 }
             }
 
-            publishLED.Off().Update();
+            cloudLed.Off().Update();
         }
         else
         {
             Log.warn("Publication was NOT successful!");
-            publishLED.Blink(250, 250).Forever();
+            cloudLed.Blink(250, 250).Forever();
         }
 
         pendingPublishes = 0;
@@ -333,7 +323,7 @@ void loop()
         currentPublish = Particle.publish("mn/s", output, 60, PRIVATE, WITH_ACK);
         currentlyPublishing = true;
         publishingStatus = true;
-        publishLED.On().Update();
+        cloudLed.On().Update();
 
         publishStatus = false;
     }
@@ -367,7 +357,7 @@ void loop()
             Log.info("Publishing data: %s", (char *)encodedData);
             currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
             currentlyPublishing = true;
-            publishLED.On().Update();
+            cloudLed.On().Update();
         }
 
         uploadFlag = false;
@@ -404,9 +394,9 @@ void loop()
 #endif
 
     // Update LEDs
-    bootLED.Update();
-    readLED.Update();
-    publishLED.Update();
+    sensorLed.Update();
+    sdLed.Update();
+    cloudLed.Update();
 }
 
 AckTracker *getAckTrackerForWriting()
