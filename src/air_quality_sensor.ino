@@ -91,6 +91,8 @@ Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFla
 
 Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
 
+Timer updateRtcTimer(3600000, []() { rtcSet = false; });
+
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
 Timer connectingTimer(60000, checkConnecting);
@@ -194,6 +196,7 @@ void setup()
     readTimer.start();
     uploadTimer.start();
     connectingTimer.start();
+    updateRtcTimer.start();
 
     if (config.data.enablePrintSystemInfo)
     {
@@ -941,6 +944,18 @@ int cloudParameters(String arg)
     {
         Log.info("Renaming AckTracker file");
         return fileTracker.startNewFile() ? 0 : -1;
+    }
+
+    if (strncmp(command, "resetRTC", commandLength) == 0)
+    {
+        Log.info("Resetting RTC");
+        rtcSet = false;
+        return 0;
+    }
+
+    if (strncmp(command, "rtc", commandLength) == 0)
+    {
+        return rtc.now().unixtime();
     }
 
     Log.error("No matching command: %s", argStr);
