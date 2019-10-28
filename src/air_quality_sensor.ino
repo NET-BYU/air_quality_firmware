@@ -118,9 +118,6 @@ STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
 void setup()
 {
-    bool sensorSuccess = true;
-    bool sdSuccess = true;
-
     // Set up cloud functions
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
@@ -141,7 +138,6 @@ void setup()
     if (!fileTracker.begin())
     {
         Log.error("Could not start file tracker. Using memory tracker");
-        sdSuccess = false;
         trackerSetup = false;
         currentTracker = &memoryTracker;
     }
@@ -154,7 +150,6 @@ void setup()
     if (!rtc.begin())
     {
         Log.error("Could not start RTC!");
-        sensorSuccess = false;
         rtcPresent = false;
     }
 
@@ -165,7 +160,6 @@ void setup()
     if (first == second)
     {
         Log.error("Could not start RTC!");
-        sensorSuccess = false;
         rtcPresent = false;
     }
     else
@@ -183,33 +177,13 @@ void setup()
     if (!pmSensor.begin())
     {
         Log.error("Could not start PM sensor!");
-        sensorSuccess = false;
         pmSensorSetup = false;
     }
 
     if (!airSensor.begin())
     {
         Log.error("Could not start CO2 sensor!");
-        sensorSuccess = false;
         airSensorSetup = false;
-    }
-
-    if (!sensorSuccess)
-    {
-        sensorLed.Blink(250, 250).Forever();
-    }
-    else
-    {
-        sensorLed.Blink(1000, 1000);
-    }
-
-    if (!sdSuccess)
-    {
-        sdLed.Blink(250, 250).Forever();
-    }
-    else
-    {
-        sdLed.Blink(1000, 1000);
     }
 
 #if SD_LOGGING
