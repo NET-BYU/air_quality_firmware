@@ -482,9 +482,9 @@ void serialEvent1()
 bool connecting()
 {
 #if Wiring_WiFi
-    return WiFi.connecting();
+    return WiFi.connecting() || !Particle.connected();
 #elif Wiring_Cellular
-    return Cellular.connecting();
+    return Cellular.connecting() || !Particle.connected();
 #else
     return false;
 #endif
