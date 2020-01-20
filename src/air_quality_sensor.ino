@@ -91,7 +91,8 @@ Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFla
 
 Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
 
-Timer updateRtcTimer(3600000, []() { rtcSet = false; });
+bool updateRTCFlag = false;
+Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
 
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
@@ -149,17 +150,8 @@ void setup()
         currentTracker = &fileTracker;
     }
 
-    if (!rtc.begin())
-    {
-        Log.error("Could not start RTC!");
-        rtcPresent = false;
-    }
-
     // Make sure RTC is really working
-    uint32_t first = rtc.now().unixtime();
-    delay(1000);
-    uint32_t second = rtc.now().unixtime();
-    if (first == second)
+    if (!rtc.begin() || !isRTCPresent())
     {
         Log.error("Could not start RTC!");
         rtcPresent = false;
@@ -366,6 +358,13 @@ void loop()
         uploadFlag = false;
     }
 
+    if (updateRTCFlag)
+    {
+        rtcPresent = isRTCPresent();
+        rtcSet = false; // Allow RTC to sync with time from cloud
+        updateRTCFlag = false;
+    }
+
     // Update RTC if needed
     if (rtcPresent && !rtcSet && Particle.connected() && Time.isValid())
     {
@@ -537,6 +536,15 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
     *length = offset;
     *count = tmpCount;
     Log.info("Length of data: %ld", *length);
+}
+
+bool isRTCPresent()
+{
+    uint32_t first = rtc.now().unixtime();
+    delay(1000);
+    uint32_t second = rtc.now().unixtime();
+
+    return first != second;
 }
 
 void readSensors(SensorPacket *packet)
