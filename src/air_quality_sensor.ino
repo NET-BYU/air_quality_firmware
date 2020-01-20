@@ -955,14 +955,12 @@ int cloudParameters(String arg)
 
     if (strncmp(command, "rtc", commandLength) == 0)
     {
-        if (rtcPresent)
-        {
-            return rtc.now().unixtime();
-        }
-        else
-        {
-            return Time.now().unixtime();
-        }
+        return rtc.now().unixtime();
+    }
+
+    if (strncmp(command, "particleTime", commandLength) == 0)
+    {
+        return Time.now();
     }
 
     Log.error("No matching command: %s", argStr);
