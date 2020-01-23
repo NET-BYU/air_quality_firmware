@@ -24,6 +24,9 @@ PRODUCT_ID(9861);
 PRODUCT_VERSION(3);
 #endif
 
+#define CO_PIN A3
+#define ADC_MAX 4050
+
 // Counters
 #define SEQUENCE_COUNT_ADDRESS 0x00
 PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
@@ -186,6 +189,13 @@ void setup()
     {
         Log.error("Could not start CO2 sensor!");
         airSensorSetup = false;
+    }
+
+    pinMode(CO_PIN, INPUT_PULLUP);
+    delay(1000);
+    if (analogRead(CO_PIN) >= ADC_MAX)
+    {
+        Log.error("CO sensor not attached.");
     }
 
 #if SD_LOGGING
@@ -607,6 +617,14 @@ void readSensors(SensorPacket *packet)
     {
         // There should always be data available so begin measuring again
         airSensor.begin();
+    }
+
+    // Read from CO sensor pin
+    if (analogRead(CO_PIN) < ADC_MAX)
+    {
+        packet->has_co = true;
+        packet->co = analogRead(CO_PIN);
+        Log.info("readSensors(): CO=%ld", packet->co);
     }
 
     if (newEnergyMeterData)
