@@ -13,6 +13,7 @@
 #include "PersistentConfig.h"
 #include "SdFat.h"
 #include "SdCardLogHandlerRK.h"
+#include "adafruit-sht31.h"
 
 #if PLATFORM_ID == PLATFORM_ARGON
 PRODUCT_ID(9901);
@@ -26,6 +27,7 @@ PRODUCT_VERSION(3);
 
 #define CO_PIN A3
 #define ADC_MAX 4050
+#define TRACE_HEATER_PIN D7
 
 // Counters
 #define SEQUENCE_COUNT_ADDRESS 0x00
@@ -60,6 +62,17 @@ bool airSensorSetup = true;
 RTC_DS3231 rtc;
 bool rtcPresent = true;
 bool rtcSet = true;
+
+#define TEMP_HUM_I2C_ADDR 0x44
+
+// Temp + Humidity Sensor
+Adafruit_SHT31 sht31; // = Adafruit_SHT31();
+float tempMeasurement;
+float humidityMeasurement;
+bool tempHumPresent = true;
+
+// CO Sensor
+bool coPresent = true;
 
 // Energy Meter Data
 #define ENERGY_METER_DATA_SIZE 200
@@ -123,6 +136,7 @@ STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
 void setup()
 {
+    RESET_REASON_PIN_RESET;
     // Set up cloud functions
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
@@ -191,11 +205,23 @@ void setup()
         airSensorSetup = false;
     }
 
+    if (! sht31.begin(TEMP_HUM_I2C_ADDR))    // Set to 0x45 for alternate i2c addr
+    {   
+        Serial.println("Couldn't find SHT31 (temp humidity)!");
+        tempHumPresent = false;
+    }
+
+    // Set the Trace heeater to be initially off
+    pinMode(TRACE_HEATER_PIN, OUTPUT);
+    digitalWrite(TRACE_HEATER_PIN, HIGH);
+
+    // Setup the CO sensor and detect if it is attached or not
     pinMode(CO_PIN, INPUT_PULLUP);
     delay(1000);
     if (analogRead(CO_PIN) >= ADC_MAX)
     {
         Log.error("CO sensor not attached.");
+        coPresent = false;
     }
 
 #if SD_LOGGING
@@ -221,6 +247,7 @@ void setup()
 
 void loop()
 {
+    digitalWrite(TRACE_HEATER_PIN, LOW);
     // Read sensor task
     if (readDataFlag)
     {
@@ -319,6 +346,7 @@ void loop()
         pendingPublishes = 0;
         currentlyPublishing = false;
         publishingStatus = false;
+        digitalWrite(TRACE_HEATER_PIN, HIGH);
     }
 
     if (publishStatus && !currentlyPublishing && Particle.connected())
@@ -332,6 +360,7 @@ void loop()
         char output[200];
         serializeJson(doc, output, sizeof(output));
 
+        digitalWrite(TRACE_HEATER_PIN, LOW);
         Log.info("Publishing status data: %s", output);
         currentPublish = Particle.publish("mn/s", output, 60, PRIVATE, WITH_ACK);
         currentlyPublishing = true;
@@ -366,6 +395,7 @@ void loop()
             uint32_t encodedDataLength;
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
+            digitalWrite(TRACE_HEATER_PIN, LOW);
             Log.info("Unconfirmed count: %ld", unconfirmedCount);
             Log.info("Publishing data: %s", (char *)encodedData);
             currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
@@ -410,6 +440,7 @@ void loop()
     sensorLed.Update();
     sdLed.Update();
     cloudLed.Update();
+    digitalWrite(TRACE_HEATER_PIN, HIGH);
 }
 
 AckTracker *getAckTrackerForWriting()
@@ -617,6 +648,21 @@ void readSensors(SensorPacket *packet)
     {
         // There should always be data available so begin measuring again
         airSensor.begin();
+    }
+
+    if (tempHumPresent)
+    {
+        float temp = sht31.readTemperature();
+        packet->temperature = (int32_t)round(temp * 10);
+        packet->has_temperature = true;
+
+        float humidity = sht31.readHumidity();
+        packet->humidity = (uint32_t)round(humidity * 10);
+        packet->has_humidity = true;
+    }
+    else
+    {
+        sht31.begin(TEMP_HUM_I2C_ADDR);
     }
 
     // Read from CO sensor pin
