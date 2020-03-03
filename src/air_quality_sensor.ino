@@ -74,6 +74,11 @@ bool tempHumPresent = true;
 // CO Sensor
 bool coPresent = true;
 
+// Power Management IC
+#if PLATFORM_ID == PLATFORM_BORON
+PMIC pmic;
+#endif
+
 // Energy Meter Data
 #define ENERGY_METER_DATA_SIZE 200
 char energyMeterData[ENERGY_METER_DATA_SIZE];
@@ -119,7 +124,7 @@ Timer connectingTimer(60000, checkConnecting);
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
 
-#define SD_LOGGING 0
+#define SD_LOGGING 1
 #if SD_LOGGING
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
 #else
@@ -136,7 +141,6 @@ STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
 void setup()
 {
-    RESET_REASON_PIN_RESET;
     // Set up cloud functions
     Particle.function("reset", cloudReset);
     Particle.function("resetCo", cloudResetCoprocessor);
@@ -218,11 +222,15 @@ void setup()
     // Setup the CO sensor and detect if it is attached or not
     pinMode(CO_PIN, INPUT_PULLUP);
     delay(1000);
-    if (analogRead(CO_PIN) >= ADC_MAX)
-    {
-        Log.error("CO sensor not attached.");
-        coPresent = false;
-    }
+    // if (analogRead(CO_PIN) >= ADC_MAX)
+    // {
+    //     Log.error("CO sensor not attached.");
+    //     coPresent = false;
+    // }
+
+    #if PLATFORM_ID == PLATFORM_BORON
+    pmic.begin();
+    #endif
 
 #if SD_LOGGING
     sdLogHandler.setup();
@@ -245,9 +253,9 @@ void setup()
     Particle.connect();
 }
 
-void loop()
+void loop() // Print out RTC status in loop
 {
-    digitalWrite(TRACE_HEATER_PIN, LOW);
+    // digitalWrite(TRACE_HEATER_PIN, LOW);
     // Read sensor task
     if (readDataFlag)
     {
@@ -346,7 +354,7 @@ void loop()
         pendingPublishes = 0;
         currentlyPublishing = false;
         publishingStatus = false;
-        digitalWrite(TRACE_HEATER_PIN, HIGH);
+        // digitalWrite(TRACE_HEATER_PIN, HIGH);
     }
 
     if (publishStatus && !currentlyPublishing && Particle.connected())
@@ -360,7 +368,7 @@ void loop()
         char output[200];
         serializeJson(doc, output, sizeof(output));
 
-        digitalWrite(TRACE_HEATER_PIN, LOW);
+        // digitalWrite(TRACE_HEATER_PIN, LOW);
         Log.info("Publishing status data: %s", output);
         currentPublish = Particle.publish("mn/s", output, 60, PRIVATE, WITH_ACK);
         currentlyPublishing = true;
@@ -395,7 +403,7 @@ void loop()
             uint32_t encodedDataLength;
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
-            digitalWrite(TRACE_HEATER_PIN, LOW);
+            // digitalWrite(TRACE_HEATER_PIN, LOW);
             Log.info("Unconfirmed count: %ld", unconfirmedCount);
             Log.info("Publishing data: %s", (char *)encodedData);
             currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
@@ -440,7 +448,7 @@ void loop()
     sensorLed.Update();
     sdLed.Update();
     cloudLed.Update();
-    digitalWrite(TRACE_HEATER_PIN, HIGH);
+    // digitalWrite(TRACE_HEATER_PIN, HIGH);
 }
 
 AckTracker *getAckTrackerForWriting()
@@ -585,12 +593,22 @@ void readSensors(SensorPacket *packet)
     uint32_t timestamp;
     if (rtcPresent)
     {
+        Log.info("readSensors(): RTC is present");
         DateTime now = rtc.now();
         timestamp = now.unixtime();
     }
     else
     {
+        Log.error("readSensors(): RTC is NOT present!");
         timestamp = Time.now();
+    }
+    if (rtcSet)
+    {
+        Log.info("readSensors(): RTC is set");
+    }
+    else
+    {
+        Log.error("readSensors(): RTC is NOT set!");
     }
     packet->timestamp = timestamp;
 
@@ -659,19 +677,25 @@ void readSensors(SensorPacket *packet)
         float humidity = sht31.readHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
+
+        Log.info("readSensors(): tempHum - temp=%ld, hum=%ld", packet->temperature, packet->humidity);
     }
     else
     {
         sht31.begin(TEMP_HUM_I2C_ADDR);
     }
 
+    #if PLATFORM_ID == PLATFORM_BORON
+    Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
+    #endif
+
     // Read from CO sensor pin
-    if (analogRead(CO_PIN) < ADC_MAX)
-    {
-        packet->has_co = true;
-        packet->co = analogRead(CO_PIN);
-        Log.info("readSensors(): CO=%ld", packet->co);
-    }
+    // if (analogRead(CO_PIN) < ADC_MAX)
+    // {
+    //     packet->has_co = true;
+    //     packet->co = analogRead(CO_PIN);
+    //     Log.info("readSensors(): CO=%ld", packet->co);
+    // }
 
     if (newEnergyMeterData)
     {
