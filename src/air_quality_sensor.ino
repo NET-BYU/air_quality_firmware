@@ -28,6 +28,8 @@ PRODUCT_VERSION(3);
 #define CO_PIN A3
 #define ADC_MAX 4050
 #define TRACE_HEATER_PIN D7
+#define TRACE_HEATER_ON LOW
+#define TRACE_HEATER_OFF HIGH
 
 // Counters
 #define SEQUENCE_COUNT_ADDRESS 0x00
@@ -217,7 +219,7 @@ void setup()
 
     // Set the Trace heeater to be initially off
     pinMode(TRACE_HEATER_PIN, OUTPUT);
-    digitalWrite(TRACE_HEATER_PIN, HIGH);
+    digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_ON);
 
     // Setup the CO sensor and detect if it is attached or not
     pinMode(CO_PIN, INPUT_PULLUP);
