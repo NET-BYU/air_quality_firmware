@@ -26,10 +26,17 @@ PRODUCT_VERSION(3);
 #endif
 
 #define CO_PIN A3
-#define ADC_MAX 4050
+#define ADC_MAX 4095
 #define TRACE_HEATER_PIN D7
 #define TRACE_HEATER_ON LOW
 #define TRACE_HEATER_OFF HIGH
+
+// Energy Sensor Stuff
+#define ENERGY_SENSOR_PRESENT_PIN D6
+#define AC_PIN A0           //set arduino signal read pin
+#define ACTectionRange 20   //set Non-invasive AC Current Sensor tection range (5A,10A,20A)
+#define VREF 3.3            // VREF: Analog reference
+#define UPPER_VOLTAGE_THRESHOLD 4050    // Some value less than ADC_MAX used for detecting a pull down resistor
 
 // Counters
 #define SEQUENCE_COUNT_ADDRESS 0x00
@@ -140,6 +147,28 @@ SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
+
+float readACCurrentValue()
+{
+  float ACCurrtntValue = 0;
+  int32_t peakVoltage = 0;  
+  float voltageVirtualValue = 0;  //Vrms
+  for (int i = 0; i < 1000; i++)
+  {
+    peakVoltage += analogRead(AC_PIN);   //read peak voltage
+    delay(1);
+  }
+  peakVoltage = peakVoltage / 1000;  
+  Serial.printf("ADC:%x\t\t", peakVoltage);
+  voltageVirtualValue = peakVoltage * 0.707;    //change the peak voltage to the Virtual Value of voltage
+
+  /*The circuit is amplified by 2 times, so it is divided by 2.*/
+  voltageVirtualValue = (voltageVirtualValue / 4096 * VREF ) / 2;  
+
+  ACCurrtntValue = voltageVirtualValue * ACTectionRange;
+
+  return ACCurrtntValue;
+}
 
 void setup()
 {
@@ -698,6 +727,12 @@ void readSensors(SensorPacket *packet)
     //     packet->co = analogRead(CO_PIN);
     //     Log.info("readSensors(): CO=%ld", packet->co);
     // }
+
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
+    {
+        float ACCurrentValue = readACCurrentValue(); //read AC Current Value
+        packet->current = (int32_t) (ACCurrentValue * 1000);
+    }
 
     if (newEnergyMeterData)
     {
