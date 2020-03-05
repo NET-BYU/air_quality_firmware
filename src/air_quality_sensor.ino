@@ -189,6 +189,12 @@ void setup()
 
     delay(5000);
 
+    pinMode(ENERGY_SENSOR_PRESENT_PIN, INPUT_PULLUP);
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
+    {
+        Log.info("Energy sensor present!");
+    }
+
     if (!fileTracker.begin())
     {
         Log.error("Could not start file tracker. Using memory tracker");
