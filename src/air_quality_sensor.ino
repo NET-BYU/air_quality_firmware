@@ -26,10 +26,17 @@ PRODUCT_VERSION(3);
 #endif
 
 #define CO_PIN A3
-#define ADC_MAX 4050
+#define ADC_MAX 4095
 #define TRACE_HEATER_PIN D7
 #define TRACE_HEATER_ON LOW
 #define TRACE_HEATER_OFF HIGH
+
+// Energy Sensor Stuff
+#define ENERGY_SENSOR_PRESENT_PIN D6
+#define AC_PIN A0           //set arduino signal read pin
+#define ACTectionRange 20   //set Non-invasive AC Current Sensor tection range (5A,10A,20A)
+#define VREF 3.3            // VREF: Analog reference
+#define UPPER_VOLTAGE_THRESHOLD 4050    // Some value less than ADC_MAX used for detecting a pull down resistor
 
 // Counters
 #define SEQUENCE_COUNT_ADDRESS 0x00
@@ -86,6 +93,12 @@ PMIC pmic;
 char energyMeterData[ENERGY_METER_DATA_SIZE];
 bool newEnergyMeterData = false;
 
+// Serial device
+#define SERIAL_TYPE_UNKNOWN 0
+#define SERIAL_TYPE_ENERGY 1
+#define SERIAL_TYPE_CO 2
+char serialDeviceType = SERIAL_TYPE_UNKNOWN;
+
 // Global variables to keep track of state
 int resetReason = RESET_REASON_NONE;
 
@@ -141,6 +154,28 @@ SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
+float readACCurrentValue()
+{
+  float ACCurrtntValue = 0;
+  int32_t peakVoltage = 0;  
+  float voltageVirtualValue = 0;  //Vrms
+  for (int i = 0; i < 1000; i++)
+  {
+    peakVoltage += analogRead(AC_PIN);   //read peak voltage
+    delay(1);
+  }
+  peakVoltage = peakVoltage / 1000;  
+  Serial.printf("ADC:%x\t\t", peakVoltage);
+  voltageVirtualValue = peakVoltage * 0.707;    //change the peak voltage to the Virtual Value of voltage
+
+  /*The circuit is amplified by 2 times, so it is divided by 2.*/
+  voltageVirtualValue = (voltageVirtualValue / 4096 * VREF ) / 2;  
+
+  ACCurrtntValue = voltageVirtualValue * ACTectionRange;
+
+  return ACCurrtntValue;
+}
+
 void setup()
 {
     // Set up cloud functions
@@ -159,6 +194,12 @@ void setup()
     Serial1.begin(115200);
 
     delay(5000);
+
+    pinMode(ENERGY_SENSOR_PRESENT_PIN, INPUT_PULLUP);
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
+    {
+        Log.info("Energy sensor present!");
+    }
 
     if (!fileTracker.begin())
     {
@@ -221,14 +262,7 @@ void setup()
     pinMode(TRACE_HEATER_PIN, OUTPUT);
     digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_ON);
 
-    // Setup the CO sensor and detect if it is attached or not
-    pinMode(CO_PIN, INPUT_PULLUP);
     delay(1000);
-    // if (analogRead(CO_PIN) >= ADC_MAX)
-    // {
-    //     Log.error("CO sensor not attached.");
-    //     coPresent = false;
-    // }
 
     #if PLATFORM_ID == PLATFORM_BORON
     pmic.begin();
@@ -524,10 +558,17 @@ AckTracker *getAckTrackerForReading()
 
 void serialEvent1()
 {
+    if (serialDeviceType == SERIAL_TYPE_UNKNOWN)
+    {
+        serialDeviceType = SERIAL_TYPE_ENERGY;
+    }
     serialLog.info("SerialEvent1!");
-    Serial1.readBytes(energyMeterData, ENERGY_METER_DATA_SIZE);
-    serialLog.info("Energy meter data: %s\n", energyMeterData);
-    newEnergyMeterData = true;
+    if (serialDeviceType == SERIAL_TYPE_ENERGY)
+    {
+        Serial1.readBytes(energyMeterData, ENERGY_METER_DATA_SIZE);
+        serialLog.info("Energy meter data: %s\n", energyMeterData);
+        newEnergyMeterData = true;
+    }
 }
 
 bool connecting()
@@ -588,6 +629,13 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
     *length = offset;
     *count = tmpCount;
     Log.info("Length of data: %ld", *length);
+}
+
+char getUARTType()
+{
+    // StaticJsonDocument<ENERGY_METER_DATA_SIZE> doc;
+    // DeserializationError error = deserializeJson(doc, energyMeterData);
+    return SERIAL_TYPE_UNKNOWN;
 }
 
 void readSensors(SensorPacket *packet)
@@ -699,6 +747,15 @@ void readSensors(SensorPacket *packet)
     //     Log.info("readSensors(): CO=%ld", packet->co);
     // }
 
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
+    {
+        Log.info("readSensors(): Energy sensor detected.");
+        float ACCurrentValue = readACCurrentValue(); //read AC Current Value
+        packet->current = (int32_t) (ACCurrentValue * 1000);
+        Log.info("readSensors(): current=%ld", packet->current);
+        packet->has_current = true;
+    }
+
     if (newEnergyMeterData)
     {
         StaticJsonDocument<ENERGY_METER_DATA_SIZE> doc;
@@ -708,6 +765,10 @@ void readSensors(SensorPacket *packet)
         {
             Log.warn("Unable to parse JSON...");
             Log.warn(error.c_str());
+            serialDeviceType = SERIAL_TYPE_CO;
+            Serial1.flush();
+            Serial1.begin(9600);
+            Log.info("Attempting to detect CO device");
         }
         else
         {
@@ -823,7 +884,14 @@ void resetDevice()
 
 void resetCoprocessor()
 {
-    Serial1.printf("reset");
+    if (serialDeviceType == SERIAL_TYPE_CO)
+    {
+        Serial1.print("R");
+    }
+    else
+    {
+        Serial1.printf("reset");
+    }
     Serial1.flush();
 }
 
