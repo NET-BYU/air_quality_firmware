@@ -25,11 +25,26 @@ PRODUCT_ID(9861);
 PRODUCT_VERSION(3);
 #endif
 
-#define CO_PIN A3
+// CO Sensor
 #define ADC_MAX 4095
+
+// Trace Heater
 #define TRACE_HEATER_PIN D7
-#define TRACE_HEATER_ON LOW
+#define TRACE_HEATER_ON LOW     // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
 #define TRACE_HEATER_OFF HIGH
+/*
+                -----------------------------------------
+                | offLengthSec = 0  | offLengthSec > 0  |
+---------------------------------------------------------
+onLengthSec = 0 | heater disabled   | heater disabled   |
+onLengthSec > 0 | heater always on  | heater uses timer |
+---------------------------------------------------------
+ */
+// onLengthSec and offLengthSec can be changed with a cloud function
+// uint32_t heaterOnLengthSec = 0;    // The number of seconds the trace heater should be on
+// uint32_t heaterOffLengthSec = 0;   // The number of seconds the trace heater should be off
+uint8_t traceHeaterState = TRACE_HEATER_OFF;    // Whether the trace heater is currently on or off
+uint32_t lastTraceHeaterToggle = 0; // The unix epoch timestamp of the last time the trace heater toggled states. 0 means it was never toggled.
 
 // Energy Sensor Stuff
 #define ENERGY_SENSOR_PRESENT_PIN D6
@@ -97,7 +112,10 @@ bool newEnergyMeterData = false;
 #define SERIAL_TYPE_UNKNOWN 0
 #define SERIAL_TYPE_ENERGY 1
 #define SERIAL_TYPE_CO 2
-char serialDeviceType = SERIAL_TYPE_UNKNOWN;
+char serialDeviceType = SERIAL_TYPE_UNKNOWN; // Assume at first that the device attached is a CO sensor
+#define SERIAL_DATA_SIZE 200
+char serialData[SERIAL_DATA_SIZE];
+bool newSerialData = false;
 
 // Global variables to keep track of state
 int resetReason = RESET_REASON_NONE;
@@ -191,9 +209,20 @@ void setup()
     Serial.begin(9600);
 
     // Energy meter port
-    Serial1.begin(115200);
+    // Serial1.begin(115200);
+    serialDeviceType = SERIAL_TYPE_UNKNOWN;  // Even though we assume we have a CO sensor attached, we don't know yet
+    Serial1.begin(9600);
+    Serial1.flush();
+    delay(1000);
+    Serial1.write('A');
+    delay(1000);
+    Serial1.print(300);
+    delay(500);
+    Serial1.write('\r');
+    delay(2500);
 
-    delay(5000);
+
+    // delay(5000);
 
     pinMode(ENERGY_SENSOR_PRESENT_PIN, INPUT_PULLUP);
     if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
@@ -260,7 +289,7 @@ void setup()
 
     // Set the Trace heeater to be initially off
     pinMode(TRACE_HEATER_PIN, OUTPUT);
-    digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_ON);
+    digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
 
     delay(1000);
 
@@ -291,7 +320,6 @@ void setup()
 
 void loop() // Print out RTC status in loop
 {
-    // digitalWrite(TRACE_HEATER_PIN, LOW);
     // Read sensor task
     if (readDataFlag)
     {
@@ -390,7 +418,6 @@ void loop() // Print out RTC status in loop
         pendingPublishes = 0;
         currentlyPublishing = false;
         publishingStatus = false;
-        // digitalWrite(TRACE_HEATER_PIN, HIGH);
     }
 
     if (publishStatus && !currentlyPublishing && Particle.connected())
@@ -404,7 +431,6 @@ void loop() // Print out RTC status in loop
         char output[200];
         serializeJson(doc, output, sizeof(output));
 
-        // digitalWrite(TRACE_HEATER_PIN, LOW);
         Log.info("Publishing status data: %s", output);
         currentPublish = Particle.publish("mn/s", output, 60, PRIVATE, WITH_ACK);
         currentlyPublishing = true;
@@ -439,7 +465,6 @@ void loop() // Print out RTC status in loop
             uint32_t encodedDataLength;
             encodeMeasurements(data, dataLength, encodedData, &encodedDataLength);
 
-            // digitalWrite(TRACE_HEATER_PIN, LOW);
             Log.info("Unconfirmed count: %ld", unconfirmedCount);
             Log.info("Publishing data: %s", (char *)encodedData);
             currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
@@ -464,6 +489,32 @@ void loop() // Print out RTC status in loop
         Log.info("Time is set to: %ld", timestamp);
     }
 
+    // Handle Trace heater
+    if (config.data.heaterOnLengthSec != 0)    // If the trace heater is NOT disabled
+    {
+        if (config.data.heaterOffLengthSec == 0 && traceHeaterState == TRACE_HEATER_OFF)   // If the trace heater is set to be ALWAYS ON, but it's off
+        {
+            traceHeaterState = TRACE_HEATER_ON;
+            digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
+        }
+        else if (config.data.heaterOffLengthSec > 0) //  && lastTraceHeaterToggle == 0 || heaterOnLengthSec != 0 && lastTraceHeaterToggle
+        {
+            uint32_t timeLimit = (traceHeaterState == TRACE_HEATER_ON) ? config.data.heaterOnLengthSec : config.data.heaterOffLengthSec;
+            uint32_t timestamp_now = rtc.now().unixtime();
+            if (lastTraceHeaterToggle == 0 || (timestamp_now - lastTraceHeaterToggle) > timeLimit)
+            {
+                traceHeaterState = !traceHeaterState;
+                digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
+                lastTraceHeaterToggle = timestamp_now;
+            }
+        }
+    }
+    else if (traceHeaterState == TRACE_HEATER_ON)
+    {
+        traceHeaterState = TRACE_HEATER_OFF;
+        digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
+    }
+
     if (connectingCounter >= MAX_RECONNECT_COUNT)
     {
         Log.warn("Rebooting myself because I've been connecting for too long.");
@@ -484,7 +535,6 @@ void loop() // Print out RTC status in loop
     sensorLed.Update();
     sdLed.Update();
     cloudLed.Update();
-    // digitalWrite(TRACE_HEATER_PIN, HIGH);
 }
 
 AckTracker *getAckTrackerForWriting()
@@ -558,12 +608,40 @@ AckTracker *getAckTrackerForReading()
 
 void serialEvent1()
 {
-    if (serialDeviceType == SERIAL_TYPE_UNKNOWN)
-    {
-        serialDeviceType = SERIAL_TYPE_ENERGY;
-    }
     serialLog.info("SerialEvent1!");
-    if (serialDeviceType == SERIAL_TYPE_ENERGY)
+    if (serialDeviceType == SERIAL_TYPE_CO || serialDeviceType == SERIAL_TYPE_UNKNOWN)
+    {
+        size_t numBytesRead = Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
+        serialLog.info("CO Data received");
+        newSerialData = true;
+        if (serialDeviceType == SERIAL_TYPE_UNKNOWN)
+        {
+            uint8_t sensorNum;
+            float conc;
+            float temp;
+            float rh;
+            uint32_t conc_c;
+            uint32_t temp_c;
+            uint32_t rh_c;
+            uint32_t days;
+            uint32_t hours;
+            uint32_t minutes;
+            uint32_t seconds;
+            int result = sscanf(serialData, "%ld, %f, %f, %f, %ld, %ld, %ld, %ld, %ld, %ld, %ld\n", &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
+            if (result != EOF)
+            {
+                serialDeviceType = SERIAL_TYPE_CO;
+            }
+            else
+            {
+                newSerialData = false;
+                serialDeviceType = SERIAL_TYPE_ENERGY;
+                Serial1.flush();
+                Serial1.begin(115200);
+            }
+        }
+    }
+    else if (serialDeviceType == SERIAL_TYPE_ENERGY)
     {
         Serial1.readBytes(energyMeterData, ENERGY_METER_DATA_SIZE);
         serialLog.info("Energy meter data: %s\n", energyMeterData);
@@ -739,14 +817,6 @@ void readSensors(SensorPacket *packet)
     Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
     #endif
 
-    // Read from CO sensor pin
-    // if (analogRead(CO_PIN) < ADC_MAX)
-    // {
-    //     packet->has_co = true;
-    //     packet->co = analogRead(CO_PIN);
-    //     Log.info("readSensors(): CO=%ld", packet->co);
-    // }
-
     if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
     {
         Log.info("readSensors(): Energy sensor detected.");
@@ -756,7 +826,28 @@ void readSensors(SensorPacket *packet)
         packet->has_current = true;
     }
 
-    if (newEnergyMeterData)
+    if (newSerialData)
+    {
+        uint8_t sensorNum;
+        float conc;
+        float temp;
+        float rh;
+        uint32_t conc_c;
+        uint32_t temp_c;
+        uint32_t rh_c;
+        uint32_t days;
+        uint32_t hours;
+        uint32_t minutes;
+        uint32_t seconds;
+        int result = sscanf(serialData, "%ld, %f, %f, %f, %ld, %ld, %ld, %ld, %ld, %ld, %ld\n", &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
+        if (result != EOF)
+        {
+            packet->has_co = true;
+            packet->co = (uint32_t) (conc * 100);
+        }
+        newSerialData = false;
+    }
+    else if (newEnergyMeterData)
     {
         StaticJsonDocument<ENERGY_METER_DATA_SIZE> doc;
         DeserializationError error = deserializeJson(doc, energyMeterData);
@@ -765,9 +856,9 @@ void readSensors(SensorPacket *packet)
         {
             Log.warn("Unable to parse JSON...");
             Log.warn(error.c_str());
-            serialDeviceType = SERIAL_TYPE_CO;
-            Serial1.flush();
-            Serial1.begin(9600);
+            // serialDeviceType = SERIAL_TYPE_CO;
+            // Serial1.flush();
+            // Serial1.begin(9600);
             Log.info("Attempting to detect CO device");
         }
         else
@@ -1114,6 +1205,36 @@ int cloudParameters(String arg)
     if (strncmp(command, "rtc", commandLength) == 0)
     {
         return rtc.now().unixtime();
+    }
+
+    if (strncmp(command, "heaterOnLengthSec") == 0)
+    {
+        if (settingValue)
+        {
+            Log.info("Updating heaterOnLengthSec (%ld)", value);
+            config.data.heaterOnLengthSec = value;
+            config.save();
+            config.print();
+        }
+        else
+        {
+            return config.data.heaterOnLengthSec;
+        }
+    }
+
+    if (strncmp(command, "heaterOffLengthSec") == 0)
+    {
+        if (settingValue)
+        {
+            Log.info("Updating heaterOffLengthSec (%ld)", value);
+            config.data.heaterOffLengthSec = value;
+            config.save();
+            config.print();
+        }
+        else
+        {
+            return config.data.heaterOffLengthSec;
+        }
     }
 
     Log.error("No matching command: %s", argStr);
