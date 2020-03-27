@@ -52,13 +52,14 @@ uint32_t lastTraceHeaterToggle = 0; // The unix epoch timestamp of the last time
 #define AC_PIN A0           //set arduino signal read pin
 #define ACTectionRange 20   //set Non-invasive AC Current Sensor tection range (5A,10A,20A)
 #define VREF 3.3            // VREF: Analog reference
-#define UPPER_VOLTAGE_THRESHOLD 4050    // Some value less than ADC_MAX used for detecting a pull down resistor
+#define UPPER_VOLTAGE_THRESHOLD 3000    // Some value less than ADC_MAX used for detecting a pull down resistor
 
 // Battery Stuff
 #define BATTERY_POWER_PIN D2
 #define BATTERY_ON_OUT HIGH
 #define BATTERY_OFF_OUT LOW
 #define POWER_SOURCE_BATTERY 5
+bool poweringFromBattery = false;
 
 // Counters
 #define SEQUENCE_COUNT_ADDRESS 0x00
@@ -236,6 +237,10 @@ void setup()
     {
         Log.info("Energy sensor present!");
     }
+
+    pinMode(BATTERY_POWER_PIN, OUTPUT);
+    digitalWrite(BATTERY_POWER_PIN, BATTERY_OFF_OUT);
+    poweringFromBattery = false;
 
     if (!fileTracker.begin())
     {
@@ -526,16 +531,18 @@ void loop() // Print out RTC status in loop
     #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
     if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY)
     {
-        if (digitalRead(BATTERY_POWER_PIN) != BATTERY_ON_OUT)
+        if (!poweringFromBattery)
         {
             Log.info("Being powered by battery! Turning on boost converter.");
             digitalWrite(BATTERY_POWER_PIN, BATTERY_ON_OUT);
+            poweringFromBattery = true;
         }
     }
-    else if (digitalRead(BATTERY_POWER_PIN) != BATTERY_OFF_OUT)
+    else if (poweringFromBattery)
     {
         Log.info("Being powered by wall! Turning off boost converter!");
         digitalWrite(BATTERY_POWER_PIN, BATTERY_OFF_OUT);
+        poweringFromBattery = false;
     }
     #endif 
 
