@@ -814,6 +814,7 @@ void readSensors(SensorPacket *packet)
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
+        Log.info("readSensors(): CO2 - CO2=%ld, temp=%ld, hum=%ld", packet->co2, packet->temperature, packet->humidity);
     }
     else
     {
