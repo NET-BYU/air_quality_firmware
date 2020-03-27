@@ -825,6 +825,7 @@ void readSensors(SensorPacket *packet)
     }
     else
     {
+        Log.error("can't read CO2");
         // There should always be data available so begin measuring again
         airSensor.begin();
     }
@@ -850,7 +851,7 @@ void readSensors(SensorPacket *packet)
     Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
     #endif
 
-    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == LOW)
     {
         Log.info("readSensors(): Energy sensor detected.");
         float ACCurrentValue = readACCurrentValue(); //read AC Current Value
