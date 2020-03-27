@@ -14,6 +14,7 @@
 #include "SdFat.h"
 #include "SdCardLogHandlerRK.h"
 #include "adafruit-sht31.h"
+#include "DiagnosticsHelperRK.h"
 
 #if PLATFORM_ID == PLATFORM_ARGON
 PRODUCT_ID(9901);
@@ -52,6 +53,12 @@ uint32_t lastTraceHeaterToggle = 0; // The unix epoch timestamp of the last time
 #define ACTectionRange 20   //set Non-invasive AC Current Sensor tection range (5A,10A,20A)
 #define VREF 3.3            // VREF: Analog reference
 #define UPPER_VOLTAGE_THRESHOLD 4050    // Some value less than ADC_MAX used for detecting a pull down resistor
+
+// Battery Stuff
+#define BATTERY_POWER_PIN D2
+#define BATTERY_ON_OUT HIGH
+#define BATTERY_OFF_OUT LOW
+#define POWER_SOURCE_BATTERY 5
 
 // Counters
 #define SEQUENCE_COUNT_ADDRESS 0x00
@@ -514,6 +521,23 @@ void loop() // Print out RTC status in loop
         traceHeaterState = TRACE_HEATER_OFF;
         digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
     }
+    
+    // Battery detection and handling, for keeping 5V sensors on with 3V battery
+    #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
+    if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY)
+    {
+        if (digitalRead(BATTERY_POWER_PIN) != BATTERY_ON_OUT)
+        {
+            Log.info("Being powered by battery! Turning on boost converter.");
+            digitalWrite(BATTERY_POWER_PIN, BATTERY_ON_OUT);
+        }
+    }
+    else if (digitalRead(BATTERY_POWER_PIN) != BATTERY_OFF_OUT)
+    {
+        Log.info("Being powered by wall! Turning off boost converter!");
+        digitalWrite(BATTERY_POWER_PIN, BATTERY_OFF_OUT);
+    }
+    #endif 
 
     if (connectingCounter >= MAX_RECONNECT_COUNT)
     {
@@ -611,12 +635,12 @@ void serialEvent1()
     serialLog.info("SerialEvent1!");
     if (serialDeviceType == SERIAL_TYPE_CO || serialDeviceType == SERIAL_TYPE_UNKNOWN)
     {
-        size_t numBytesRead = Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
-        serialLog.info("CO Data received");
+        Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
+        serialLog.info("Serial Data received");
         newSerialData = true;
         if (serialDeviceType == SERIAL_TYPE_UNKNOWN)
         {
-            uint8_t sensorNum;
+            uint32_t sensorNum;
             float conc;
             float temp;
             float rh;
@@ -627,9 +651,10 @@ void serialEvent1()
             uint32_t hours;
             uint32_t minutes;
             uint32_t seconds;
-            int result = sscanf(serialData, "%ld, %f, %f, %f, %ld, %ld, %ld, %ld, %ld, %ld, %ld\n", &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
+            int result = sscanf(serialData, "%lu, %f, %f, %f, %lu, %lu, %lu, %lu, %lu, %lu, %lu", &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
             if (result != EOF)
             {
+                serialLog.info("Serial data is from CO sensor");
                 serialDeviceType = SERIAL_TYPE_CO;
             }
             else
@@ -826,9 +851,14 @@ void readSensors(SensorPacket *packet)
         packet->has_current = true;
     }
 
+    if (serialDeviceType == SERIAL_TYPE_CO || serialDeviceType == SERIAL_TYPE_UNKNOWN)
+    {
+        Serial1.write('\r');
+    }
+
     if (newSerialData)
     {
-        uint8_t sensorNum;
+        uint32_t sensorNum;
         float conc;
         float temp;
         float rh;
@@ -839,11 +869,16 @@ void readSensors(SensorPacket *packet)
         uint32_t hours;
         uint32_t minutes;
         uint32_t seconds;
-        int result = sscanf(serialData, "%ld, %f, %f, %f, %ld, %ld, %ld, %ld, %ld, %ld, %ld\n", &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
+        int result = sscanf(serialData, "%lu, %f, %f, %f, %lu, %lu, %lu, %lu, %lu, %lu, %lu", &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
         if (result != EOF)
         {
             packet->has_co = true;
             packet->co = (uint32_t) (conc * 100);
+            Log.info("readSensors(): Reading co value of %f, transmitting %ld", conc, packet->co);
+        }
+        else
+        {
+            Log.error("readSensors(): Could not interpret co value");
         }
         newSerialData = false;
     }
@@ -1207,7 +1242,7 @@ int cloudParameters(String arg)
         return rtc.now().unixtime();
     }
 
-    if (strncmp(command, "heaterOnLengthSec") == 0)
+    if (strncmp(command, "heaterOnLengthSec", commandLength) == 0)
     {
         if (settingValue)
         {
@@ -1215,6 +1250,7 @@ int cloudParameters(String arg)
             config.data.heaterOnLengthSec = value;
             config.save();
             config.print();
+            return 0;
         }
         else
         {
@@ -1222,7 +1258,7 @@ int cloudParameters(String arg)
         }
     }
 
-    if (strncmp(command, "heaterOffLengthSec") == 0)
+    if (strncmp(command, "heaterOffLengthSec", commandLength) == 0)
     {
         if (settingValue)
         {
@@ -1230,11 +1266,23 @@ int cloudParameters(String arg)
             config.data.heaterOffLengthSec = value;
             config.save();
             config.print();
+            return 0;
         }
         else
         {
             return config.data.heaterOffLengthSec;
         }
+    }
+
+    if (strncmp(command, "powerSource", commandLength) == 0)
+    {
+        #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
+        return DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE);
+        #else
+        Log.error("Non-Boron device cannot determine power source");
+        return -1;
+        #endif
+
     }
 
     Log.error("No matching command: %s", argStr);
@@ -1315,6 +1363,11 @@ void printPacket(SensorPacket *packet)
     if (packet->has_co2)
     {
         Log.info("\tC02: %ld", packet->co2);
+    }
+
+    if (packet->has_co)
+    {
+        Log.info("\tCO: %ld", packet->co);
     }
 
     if (packet->has_voltage)
