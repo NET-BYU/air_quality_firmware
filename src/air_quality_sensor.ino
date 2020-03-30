@@ -52,7 +52,8 @@ uint32_t lastTraceHeaterToggle = 0; // The unix epoch timestamp of the last time
 #define AC_PIN A0           //set arduino signal read pin
 #define ACTectionRange 20   //set Non-invasive AC Current Sensor tection range (5A,10A,20A)
 #define VREF 3.3            // VREF: Analog reference
-#define UPPER_VOLTAGE_THRESHOLD 3000    // Some value less than ADC_MAX used for detecting a pull down resistor
+// #define UPPER_VOLTAGE_THRESHOLD 3000    // Some value less than ADC_MAX used for detecting a pull down resistor
+#define ENERGY_SENSOR_DETECTED LOW  // What the ENERGY_SENSOR_PRESENT_PIN should read if there is an energy sensor
 
 // Battery Stuff
 #define BATTERY_POWER_PIN D2
@@ -233,7 +234,7 @@ void setup()
     // delay(5000);
 
     pinMode(ENERGY_SENSOR_PRESENT_PIN, INPUT_PULLUP);
-    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED)
     {
         Log.info("Energy sensor present!");
     }
@@ -849,7 +850,7 @@ void readSensors(SensorPacket *packet)
     Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
     #endif
 
-    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) < UPPER_VOLTAGE_THRESHOLD)
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED)
     {
         Log.info("readSensors(): Energy sensor detected.");
         float ACCurrentValue = readACCurrentValue(); //read AC Current Value
