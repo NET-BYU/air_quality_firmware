@@ -198,6 +198,8 @@ float readACCurrentValue()
   /*The circuit is amplified by 2 times, so it is divided by 2.*/
   voltageVirtualValue = (voltageVirtualValue / 4096 * VREF ) / 2;  
 
+  Log.info("voltageVirtualValue=%f", voltageVirtualValue);
+
   ACCurrtntValue = voltageVirtualValue * ACTectionRange;
 
   return ACCurrtntValue;
@@ -856,6 +858,7 @@ void readSensors(SensorPacket *packet)
     {
         Log.info("readSensors(): Energy sensor detected.");
         float ACCurrentValue = readACCurrentValue(); //read AC Current Value
+        Log.info("readSensors(): float current=%f", ACCurrentValue);
         packet->current = (int32_t) (ACCurrentValue * 1000);
         Log.info("readSensors(): current=%ld", packet->current);
         packet->has_current = true;
