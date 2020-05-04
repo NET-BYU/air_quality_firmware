@@ -26,9 +26,6 @@ PRODUCT_ID(9861);
 PRODUCT_VERSION(3);
 #endif
 
-// CO Sensor
-#define ADC_MAX 4095
-
 // Trace Heater
 #define TRACE_HEATER_PIN D7
 #define TRACE_HEATER_ON LOW     // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
@@ -56,10 +53,10 @@ uint32_t lastTraceHeaterToggle = 0; // The unix epoch timestamp of the last time
 #define ENERGY_SENSOR_DETECTED LOW  // What the ENERGY_SENSOR_PRESENT_PIN should read if there is an energy sensor
 
 // Battery Stuff
-#define BATTERY_POWER_PIN D2
-#define BATTERY_ON_OUT HIGH
-#define BATTERY_OFF_OUT LOW
-#define POWER_SOURCE_BATTERY 5
+#define BATTERY_POWER_PIN D2  // Controls the relay and boost converter for the battery
+#define BATTERY_ON_OUT HIGH  // Write to relay to turn on boost converter
+#define BATTERY_OFF_OUT LOW  // Opposite of above
+#define POWER_SOURCE_BATTERY 5  // Value returned from diag helper if the system is powered by battery
 bool poweringFromBattery = false;
 
 // Counters
@@ -72,7 +69,7 @@ PersistentConfig config(CONFIG_ADDRESS);
 
 // SD Card
 SdFat sd;
-const int SD_CHIP_SELECT = A5;
+const int SD_CHIP_SELECT = A5;  // Pin on sd card reader, needs to be passed to SDFat Lib
 
 // Write data points to SD card and keep track of what has been ackowledged
 #define ENTRY_SIZE 300
@@ -84,7 +81,7 @@ bool trackerSetup = true;
 
 // PM Sensor
 SPS30 pmSensor;
-float pmMeasurement[4];
+float pmMeasurement[4]; // PM 1, 2.5, 4, 10
 bool pmSensorSetup = true;
 
 // CO2 + Temp + Humidity Sensor
@@ -144,21 +141,21 @@ auto cloudLed = JLed(D5);
 
 // Timers
 bool readDataFlag = true;
-Timer readTimer(config.data.readPeriodMs, []() { readDataFlag = true; });
+Timer readTimer(config.data.readPeriodMs, []() { readDataFlag = true; });  // How often the system reads from the sensors
 
 bool uploadFlag = true;
-Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });
+Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });  // How often the info is uploaded to the particle cloud --> google cloud --> MQTT --> db
 
 bool printSystemInfoFlag = true;
-Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
+Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });  // Periodically write data usage in the logs
 
-Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
+Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);  // Periodically resets the senspr (like once an hour...?) to avoid weird catches
 
-Timer updateRtcTimer(3600000, []() { rtcSet = false; });
+Timer updateRtcTimer(3600000, []() { rtcSet = false; });  // Same as reset timer for RTC to avoid weirdness...
 
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
-Timer connectingTimer(60000, checkConnecting);
+Timer connectingTimer(60000, checkConnecting);  // Time it will try to connect before reseting the device
 
 #define LENGTH_HEADER_SIZE 2
 
@@ -857,11 +854,16 @@ void readSensors(SensorPacket *packet)
     if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED)
     {
         Log.info("readSensors(): Energy sensor detected.");
-        float ACCurrentValue = readACCurrentValue(); //read AC Current Value
-        Log.info("readSensors(): float current=%f", ACCurrentValue);
-        packet->current = (int32_t) (ACCurrentValue * 1000);
-        Log.info("readSensors(): current=%ld", packet->current);
+        float acCurrentValue = readACCurrentValue(); //read AC Current Value
+        float measuredPower = acCurrentValue * config.data.countryVoltage;
+        Log.info("countryVoltage: int voltage=%ld", config.data.countryVoltage);
+        Log.info("readSensors(): float current=%f", acCurrentValue);
         packet->has_current = true;
+        packet->current = (int32_t) (acCurrentValue * 1000);
+        Log.info("readSensors(): float power=%f", measuredPower);
+        packet->has_power = true;
+        packet->power = measuredPower;
+        // Log.info("readSensors(): current=%ld", packet->current);
     }
 
     if (serialDeviceType == SERIAL_TYPE_CO || serialDeviceType == SERIAL_TYPE_UNKNOWN)
@@ -1284,6 +1286,22 @@ int cloudParameters(String arg)
         else
         {
             return config.data.heaterOffLengthSec;
+        }
+    }
+
+    if(strncmp(command, "countryVoltage", commandLength) == 0)
+    {
+        if (settingValue)
+        {
+            Log.info("Updating countryVoltage (%ld)", value);
+            config.data.countryVoltage = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.countryVoltage;
         }
     }
 
