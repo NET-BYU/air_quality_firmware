@@ -855,14 +855,16 @@ void readSensors(SensorPacket *packet)
     {
         Log.info("readSensors(): Energy sensor detected.");
         float acCurrentValue = readACCurrentValue(); //read AC Current Value
-        float measuredPower = acCurrentValue * config.data.countryVoltage;
+        float heaterPF = ((float) config.data.heaterPowerFactor / 1000.0f); // Puts power factor into float form
+        float measuredPower = acCurrentValue * config.data.countryVoltage * heaterPF; // Calculates real power
+        Log.info("heaterPowerFactor: pf=%f", heaterPF);
         Log.info("countryVoltage: int voltage=%ld", config.data.countryVoltage);
         Log.info("readSensors(): float current=%f", acCurrentValue);
         packet->has_current = true;
         packet->current = (int32_t) (acCurrentValue * 1000);
         Log.info("readSensors(): float power=%f", measuredPower);
         packet->has_power = true;
-        packet->power = measuredPower;
+        packet->power = (int32_t) measuredPower;
         // Log.info("readSensors(): current=%ld", packet->current);
     }
 
@@ -1302,6 +1304,23 @@ int cloudParameters(String arg)
         else
         {
             return config.data.countryVoltage;
+        }
+    }
+
+    if(strncmp(command, "heaterPowerFactor", commandLength) == 0)
+    {
+        Log.info("MADE IT HERE");
+        if (settingValue)
+        {
+            Log.info("Updating heaterPowerFactor (%ld)", value);
+            config.data.heaterPowerFactor = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.heaterPowerFactor;
         }
     }
 
