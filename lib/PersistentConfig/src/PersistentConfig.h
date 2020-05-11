@@ -14,6 +14,10 @@ struct v1
     uint32_t uploadBatchSize;
     uint32_t maxPubSize;
     uint32_t delayBeforeReboot;
+    uint32_t heaterOnLengthSec;
+    uint32_t heaterOffLengthSec;
+    uint32_t countryVoltage;
+    uint32_t heaterPowerFactor;
 };
 typedef struct v1 Config;
 
@@ -34,7 +38,7 @@ private:
     uint32_t address;
     void load();
 
-    Config v1Default = {1, 60000, 10000, 10000, 0, 10, 620, 2000};
+    Config v1Default = {1, 60000, 10000, 10000, 0, 10, 620, 2000, 0, 0, 120, 1000};
 };
 
 #endif

@@ -13,6 +13,8 @@
 #include "PersistentConfig.h"
 #include "SdFat.h"
 #include "SdCardLogHandlerRK.h"
+#include "adafruit-sht31.h"
+#include "DiagnosticsHelperRK.h"
 
 #if PLATFORM_ID == PLATFORM_ARGON
 PRODUCT_ID(9901);
@@ -24,6 +26,39 @@ PRODUCT_ID(9861);
 PRODUCT_VERSION(3);
 #endif
 
+// Trace Heater
+#define TRACE_HEATER_PIN D7
+#define TRACE_HEATER_ON LOW     // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
+#define TRACE_HEATER_OFF HIGH
+/*
+                -----------------------------------------
+                | offLengthSec = 0  | offLengthSec > 0  |
+---------------------------------------------------------
+onLengthSec = 0 | heater disabled   | heater disabled   |
+onLengthSec > 0 | heater always on  | heater uses timer |
+---------------------------------------------------------
+ */
+// onLengthSec and offLengthSec can be changed with a cloud function
+// uint32_t heaterOnLengthSec = 0;    // The number of seconds the trace heater should be on
+// uint32_t heaterOffLengthSec = 0;   // The number of seconds the trace heater should be off
+uint8_t traceHeaterState = TRACE_HEATER_OFF;    // Whether the trace heater is currently on or off
+uint32_t lastTraceHeaterToggle = 0; // The unix epoch timestamp of the last time the trace heater toggled states. 0 means it was never toggled.
+
+// Energy Sensor Stuff
+#define ENERGY_SENSOR_PRESENT_PIN D6
+#define AC_PIN A0           //set arduino signal read pin
+#define ACTectionRange 20   //set Non-invasive AC Current Sensor tection range (5A,10A,20A)
+#define VREF 3.3            // VREF: Analog reference
+// #define UPPER_VOLTAGE_THRESHOLD 3000    // Some value less than ADC_MAX used for detecting a pull down resistor
+#define ENERGY_SENSOR_DETECTED LOW  // What the ENERGY_SENSOR_PRESENT_PIN should read if there is an energy sensor
+
+// Battery Stuff
+#define BATTERY_POWER_PIN D2  // Controls the relay and boost converter for the battery
+#define BATTERY_ON_OUT HIGH  // Write to relay to turn on boost converter
+#define BATTERY_OFF_OUT LOW  // Opposite of above
+#define POWER_SOURCE_BATTERY 5  // Value returned from diag helper if the system is powered by battery
+bool poweringFromBattery = false;
+
 // Counters
 #define SEQUENCE_COUNT_ADDRESS 0x00
 PersistentCounter sequence(SEQUENCE_COUNT_ADDRESS);
@@ -34,7 +69,7 @@ PersistentConfig config(CONFIG_ADDRESS);
 
 // SD Card
 SdFat sd;
-const int SD_CHIP_SELECT = A5;
+const int SD_CHIP_SELECT = A5;  // Pin on sd card reader, needs to be passed to SDFat Lib
 
 // Write data points to SD card and keep track of what has been ackowledged
 #define ENTRY_SIZE 300
@@ -46,7 +81,7 @@ bool trackerSetup = true;
 
 // PM Sensor
 SPS30 pmSensor;
-float pmMeasurement[4];
+float pmMeasurement[4]; // PM 1, 2.5, 4, 10
 bool pmSensorSetup = true;
 
 // CO2 + Temp + Humidity Sensor
@@ -58,10 +93,35 @@ RTC_DS3231 rtc;
 bool rtcPresent = true;
 bool rtcSet = true;
 
+#define TEMP_HUM_I2C_ADDR 0x44
+
+// Temp + Humidity Sensor
+Adafruit_SHT31 sht31; // = Adafruit_SHT31();
+float tempMeasurement;
+float humidityMeasurement;
+bool tempHumPresent = true;
+
+// CO Sensor
+bool coPresent = true;
+
+// Power Management IC
+#if PLATFORM_ID == PLATFORM_BORON
+PMIC pmic;
+#endif
+
 // Energy Meter Data
 #define ENERGY_METER_DATA_SIZE 200
 char energyMeterData[ENERGY_METER_DATA_SIZE];
 bool newEnergyMeterData = false;
+
+// Serial device
+#define SERIAL_TYPE_UNKNOWN 0
+#define SERIAL_TYPE_ENERGY 1
+#define SERIAL_TYPE_CO 2
+char serialDeviceType = SERIAL_TYPE_UNKNOWN; // Assume at first that the device attached is a CO sensor
+#define SERIAL_DATA_SIZE 200
+char serialData[SERIAL_DATA_SIZE];
+bool newSerialData = false;
 
 // Global variables to keep track of state
 int resetReason = RESET_REASON_NONE;
@@ -81,22 +141,22 @@ auto cloudLed = JLed(D5);
 
 // Timers
 bool readDataFlag = true;
-Timer readTimer(config.data.readPeriodMs, []() { readDataFlag = true; });
+Timer readTimer(config.data.readPeriodMs, []() { readDataFlag = true; });  // How often the system reads from the sensors
 
 bool uploadFlag = true;
-Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });
+Timer uploadTimer(config.data.uploadPeriodMs, []() { uploadFlag = true; });  // How often the info is uploaded to the particle cloud --> google cloud --> MQTT --> db
 
 bool printSystemInfoFlag = true;
-Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });
+Timer printSystemInfoTimer(config.data.printSysInfoMs, []() { printSystemInfoFlag = true; });  // Periodically write data usage in the logs
 
-Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);
+Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);  // Periodically resets the senspr (like once an hour...?) to avoid weird catches
 
 bool updateRTCFlag = false;
 Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
 
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
-Timer connectingTimer(60000, checkConnecting);
+Timer connectingTimer(60000, checkConnecting);  // Time it will try to connect before reseting the device
 
 #define LENGTH_HEADER_SIZE 2
 
@@ -104,7 +164,7 @@ Timer connectingTimer(60000, checkConnecting);
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
 
-#define SD_LOGGING 0
+#define SD_LOGGING 1
 #if SD_LOGGING
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
 #else
@@ -118,6 +178,30 @@ SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
+
+float readACCurrentValue()
+{
+  float ACCurrtntValue = 0;
+  int32_t peakVoltage = 0;  
+  float voltageVirtualValue = 0;  //Vrms
+  for (int i = 0; i < 1000; i++)
+  {
+    peakVoltage += analogRead(AC_PIN);   //read peak voltage
+    delay(1);
+  }
+  peakVoltage = peakVoltage / 1000;  
+  Serial.printf("ADC:%x\t\t", peakVoltage);
+  voltageVirtualValue = peakVoltage * 0.707;    //change the peak voltage to the Virtual Value of voltage
+
+  /*The circuit is amplified by 2 times, so it is divided by 2.*/
+  voltageVirtualValue = (voltageVirtualValue / 4096 * VREF ) / 2;  
+
+  Log.info("voltageVirtualValue=%f", voltageVirtualValue);
+
+  ACCurrtntValue = voltageVirtualValue * ACTectionRange;
+
+  return ACCurrtntValue;
+}
 
 void setup()
 {
@@ -134,9 +218,30 @@ void setup()
     Serial.begin(9600);
 
     // Energy meter port
-    Serial1.begin(115200);
+    // Serial1.begin(115200);
+    serialDeviceType = SERIAL_TYPE_UNKNOWN;  // Even though we assume we have a CO sensor attached, we don't know yet
+    Serial1.begin(9600);
+    Serial1.flush();
+    delay(1000);
+    Serial1.write('A');
+    delay(1000);
+    Serial1.print(300);
+    delay(500);
+    Serial1.write('\r');
+    delay(2500);
 
-    delay(5000);
+
+    // delay(5000);
+
+    pinMode(ENERGY_SENSOR_PRESENT_PIN, INPUT_PULLUP);
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED)
+    {
+        Log.info("Energy sensor present!");
+    }
+
+    pinMode(BATTERY_POWER_PIN, OUTPUT);
+    digitalWrite(BATTERY_POWER_PIN, BATTERY_OFF_OUT);
+    poweringFromBattery = false;
 
     if (!fileTracker.begin())
     {
@@ -180,6 +285,22 @@ void setup()
         airSensorSetup = false;
     }
 
+    if (! sht31.begin(TEMP_HUM_I2C_ADDR))    // Set to 0x45 for alternate i2c addr
+    {   
+        Serial.println("Couldn't find SHT31 (temp humidity)!");
+        tempHumPresent = false;
+    }
+
+    // Set the Trace heeater to be initially off
+    pinMode(TRACE_HEATER_PIN, OUTPUT);
+    digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
+
+    delay(1000);
+
+    #if PLATFORM_ID == PLATFORM_BORON
+    pmic.begin();
+    #endif
+
 #if SD_LOGGING
     sdLogHandler.setup();
 #endif
@@ -201,7 +322,7 @@ void setup()
     Particle.connect();
 }
 
-void loop()
+void loop() // Print out RTC status in loop
 {
     // Read sensor task
     if (readDataFlag)
@@ -379,6 +500,51 @@ void loop()
         Log.info("Time is set to: %ld", timestamp);
     }
 
+    // Handle Trace heater
+    if (config.data.heaterOnLengthSec != 0)    // If the trace heater is NOT disabled
+    {
+        if (config.data.heaterOffLengthSec == 0 && traceHeaterState == TRACE_HEATER_OFF)   // If the trace heater is set to be ALWAYS ON, but it's off
+        {
+            traceHeaterState = TRACE_HEATER_ON;
+            digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
+        }
+        else if (config.data.heaterOffLengthSec > 0) //  && lastTraceHeaterToggle == 0 || heaterOnLengthSec != 0 && lastTraceHeaterToggle
+        {
+            uint32_t timeLimit = (traceHeaterState == TRACE_HEATER_ON) ? config.data.heaterOnLengthSec : config.data.heaterOffLengthSec;
+            uint32_t timestamp_now = rtc.now().unixtime();
+            if (lastTraceHeaterToggle == 0 || (timestamp_now - lastTraceHeaterToggle) > timeLimit)
+            {
+                traceHeaterState = !traceHeaterState;
+                digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
+                lastTraceHeaterToggle = timestamp_now;
+            }
+        }
+    }
+    else if (traceHeaterState == TRACE_HEATER_ON)
+    {
+        traceHeaterState = TRACE_HEATER_OFF;
+        digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
+    }
+    
+    // Battery detection and handling, for keeping 5V sensors on with 3V battery
+    #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
+    if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY)
+    {
+        if (!poweringFromBattery)
+        {
+            Log.info("Being powered by battery! Turning on boost converter.");
+            digitalWrite(BATTERY_POWER_PIN, BATTERY_ON_OUT);
+            poweringFromBattery = true;
+        }
+    }
+    else if (poweringFromBattery)
+    {
+        Log.info("Being powered by wall! Turning off boost converter!");
+        digitalWrite(BATTERY_POWER_PIN, BATTERY_OFF_OUT);
+        poweringFromBattery = false;
+    }
+    #endif 
+
     if (connectingCounter >= MAX_RECONNECT_COUNT)
     {
         Log.warn("Rebooting myself because I've been connecting for too long.");
@@ -473,9 +639,45 @@ AckTracker *getAckTrackerForReading()
 void serialEvent1()
 {
     serialLog.info("SerialEvent1!");
-    Serial1.readBytes(energyMeterData, ENERGY_METER_DATA_SIZE);
-    serialLog.info("Energy meter data: %s\n", energyMeterData);
-    newEnergyMeterData = true;
+    if (serialDeviceType == SERIAL_TYPE_CO || serialDeviceType == SERIAL_TYPE_UNKNOWN)
+    {
+        Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
+        serialLog.info("Serial Data received");
+        newSerialData = true;
+        if (serialDeviceType == SERIAL_TYPE_UNKNOWN)
+        {
+            uint32_t sensorNum;
+            float conc;
+            float temp;
+            float rh;
+            uint32_t conc_c;
+            uint32_t temp_c;
+            uint32_t rh_c;
+            uint32_t days;
+            uint32_t hours;
+            uint32_t minutes;
+            uint32_t seconds;
+            int result = sscanf(serialData, "%lu, %f, %f, %f, %lu, %lu, %lu, %lu, %lu, %lu, %lu", &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
+            if (result != EOF)
+            {
+                serialLog.info("Serial data is from CO sensor");
+                serialDeviceType = SERIAL_TYPE_CO;
+            }
+            else
+            {
+                newSerialData = false;
+                serialDeviceType = SERIAL_TYPE_ENERGY;
+                Serial1.flush();
+                Serial1.begin(115200);
+            }
+        }
+    }
+    else if (serialDeviceType == SERIAL_TYPE_ENERGY)
+    {
+        Serial1.readBytes(energyMeterData, ENERGY_METER_DATA_SIZE);
+        serialLog.info("Energy meter data: %s\n", energyMeterData);
+        newEnergyMeterData = true;
+    }
 }
 
 bool connecting()
@@ -547,17 +749,34 @@ bool isRTCPresent()
     return first != second;
 }
 
+char getUARTType()
+{
+    // StaticJsonDocument<ENERGY_METER_DATA_SIZE> doc;
+    // DeserializationError error = deserializeJson(doc, energyMeterData);
+    return SERIAL_TYPE_UNKNOWN;
+}
+
 void readSensors(SensorPacket *packet)
 {
     uint32_t timestamp;
     if (rtcPresent)
     {
+        Log.info("readSensors(): RTC is present");
         DateTime now = rtc.now();
         timestamp = now.unixtime();
     }
     else
     {
+        Log.error("readSensors(): RTC is NOT present!");
         timestamp = Time.now();
+    }
+    if (rtcSet)
+    {
+        Log.info("readSensors(): RTC is set");
+    }
+    else
+    {
+        Log.error("readSensors(): RTC is NOT set!");
     }
     packet->timestamp = timestamp;
 
@@ -610,14 +829,85 @@ void readSensors(SensorPacket *packet)
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
+        Log.info("readSensors(): CO2 - CO2=%ld, temp=%ld, hum=%ld", packet->co2, packet->temperature, packet->humidity);
     }
     else
     {
+        Log.error("can't read CO2");
         // There should always be data available so begin measuring again
         airSensor.begin();
     }
 
-    if (newEnergyMeterData)
+    if (tempHumPresent)
+    {
+        float temp = sht31.readTemperature();
+        packet->temperature = (int32_t)round(temp * 10);
+        packet->has_temperature = true;
+
+        float humidity = sht31.readHumidity();
+        packet->humidity = (uint32_t)round(humidity * 10);
+        packet->has_humidity = true;
+
+        Log.info("readSensors(): tempHum - temp=%ld, hum=%ld", packet->temperature, packet->humidity);
+    }
+    else
+    {
+        sht31.begin(TEMP_HUM_I2C_ADDR);
+    }
+
+    #if PLATFORM_ID == PLATFORM_BORON
+    Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
+    #endif
+
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED)
+    {
+        Log.info("readSensors(): Energy sensor detected.");
+        float acCurrentValue = readACCurrentValue(); //read AC Current Value
+        float heaterPF = ((float) config.data.heaterPowerFactor / 1000.0f); // Puts power factor into float form
+        float measuredPower = acCurrentValue * config.data.countryVoltage * heaterPF; // Calculates real power
+        Log.info("heaterPowerFactor: pf=%f", heaterPF);
+        Log.info("countryVoltage: int voltage=%ld", config.data.countryVoltage);
+        Log.info("readSensors(): float current=%f", acCurrentValue);
+        packet->has_current = true;
+        packet->current = (int32_t) (acCurrentValue * 1000);
+        Log.info("readSensors(): float power=%f", measuredPower);
+        packet->has_power = true;
+        packet->power = (int32_t) measuredPower;
+        // Log.info("readSensors(): current=%ld", packet->current);
+    }
+
+    if (serialDeviceType == SERIAL_TYPE_CO || serialDeviceType == SERIAL_TYPE_UNKNOWN)
+    {
+        Serial1.write('\r');
+    }
+
+    if (newSerialData)
+    {
+        uint32_t sensorNum;
+        float conc;
+        float temp;
+        float rh;
+        uint32_t conc_c;
+        uint32_t temp_c;
+        uint32_t rh_c;
+        uint32_t days;
+        uint32_t hours;
+        uint32_t minutes;
+        uint32_t seconds;
+        int result = sscanf(serialData, "%lu, %f, %f, %f, %lu, %lu, %lu, %lu, %lu, %lu, %lu", &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
+        if (result != EOF)
+        {
+            packet->has_co = true;
+            packet->co = (uint32_t) (conc * 100);
+            Log.info("readSensors(): Reading co value of %f, transmitting %ld", conc, packet->co);
+        }
+        else
+        {
+            Log.error("readSensors(): Could not interpret co value");
+        }
+        newSerialData = false;
+    }
+    else if (newEnergyMeterData)
     {
         StaticJsonDocument<ENERGY_METER_DATA_SIZE> doc;
         DeserializationError error = deserializeJson(doc, energyMeterData);
@@ -626,6 +916,10 @@ void readSensors(SensorPacket *packet)
         {
             Log.warn("Unable to parse JSON...");
             Log.warn(error.c_str());
+            // serialDeviceType = SERIAL_TYPE_CO;
+            // Serial1.flush();
+            // Serial1.begin(9600);
+            Log.info("Attempting to detect CO device");
         }
         else
         {
@@ -741,7 +1035,14 @@ void resetDevice()
 
 void resetCoprocessor()
 {
-    Serial1.printf("reset");
+    if (serialDeviceType == SERIAL_TYPE_CO)
+    {
+        Serial1.print("R");
+    }
+    else
+    {
+        Serial1.printf("reset");
+    }
     Serial1.flush();
 }
 
@@ -971,6 +1272,81 @@ int cloudParameters(String arg)
         return Time.now();
     }
 
+    if (strncmp(command, "heaterOnLengthSec", commandLength) == 0)
+    {
+        if (settingValue)
+        {
+            Log.info("Updating heaterOnLengthSec (%ld)", value);
+            config.data.heaterOnLengthSec = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.heaterOnLengthSec;
+        }
+    }
+
+    if (strncmp(command, "heaterOffLengthSec", commandLength) == 0)
+    {
+        if (settingValue)
+        {
+            Log.info("Updating heaterOffLengthSec (%ld)", value);
+            config.data.heaterOffLengthSec = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.heaterOffLengthSec;
+        }
+    }
+
+    if(strncmp(command, "countryVoltage", commandLength) == 0)
+    {
+        if (settingValue)
+        {
+            Log.info("Updating countryVoltage (%ld)", value);
+            config.data.countryVoltage = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.countryVoltage;
+        }
+    }
+
+    if(strncmp(command, "heaterPowerFactor", commandLength) == 0)
+    {
+        Log.info("MADE IT HERE");
+        if (settingValue)
+        {
+            Log.info("Updating heaterPowerFactor (%ld)", value);
+            config.data.heaterPowerFactor = value;
+            config.save();
+            config.print();
+            return 0;
+        }
+        else
+        {
+            return config.data.heaterPowerFactor;
+        }
+    }
+
+    if (strncmp(command, "powerSource", commandLength) == 0)
+    {
+        #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
+        return DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE);
+        #else
+        Log.error("Non-Boron device cannot determine power source");
+        return -1;
+        #endif
+    }
+
     Log.error("No matching command: %s", argStr);
     return -1;
 }
@@ -1049,6 +1425,11 @@ void printPacket(SensorPacket *packet)
     if (packet->has_co2)
     {
         Log.info("\tC02: %ld", packet->co2);
+    }
+
+    if (packet->has_co)
+    {
+        Log.info("\tCO: %ld", packet->co);
     }
 
     if (packet->has_voltage)
