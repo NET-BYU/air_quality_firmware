@@ -24,12 +24,21 @@ void PersistentConfig::load()
     {
         log.info("Config has not been initialized.");
         log.info("Using default values");
-        data = v1Default;
+        data = defaultConfig;
+        
         save();
-        return;
     }
-
-    // TODO: Check to see if we need to migrate to a newer version
+    // Migrate from v1 to v2
+    else if (data.version == 1)
+    {
+        data.heaterOnLengthSec = defaultConfig.heaterOnLengthSec;
+        data.heaterOffLengthSec = defaultConfig.heaterOffLengthSec;
+        data.countryVoltage = defaultConfig.countryVoltage;
+        data.heaterPowerFactor = defaultConfig.heaterPowerFactor;
+        data.version = 2;
+        
+        save();
+    }
 }
 
 void PersistentConfig::save()
@@ -39,7 +48,7 @@ void PersistentConfig::save()
 
 void PersistentConfig::reset()
 {
-    data = v1Default;
+    data = defaultConfig;
     save();
 }
 
@@ -54,5 +63,9 @@ void PersistentConfig::print()
     Log.info("\tuploadBatchSize: %ld", data.uploadBatchSize);
     Log.info("\tmaxPubSize: %ld", data.maxPubSize);
     Log.info("\tdelayBeforeReboot: %ld", data.delayBeforeReboot);
+    Log.info("\heaterOnLengthSec: %ld", data.heaterOnLengthSec);
+    Log.info("\heaterOffLengthSec: %ld", data.heaterOffLengthSec);
+    Log.info("\countryVoltage: %ld", data.countryVoltage);
+    Log.info("\heaterPowerFactor: %ld", data.heaterPowerFactor);
     Log.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
 }
