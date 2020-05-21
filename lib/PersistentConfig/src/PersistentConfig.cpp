@@ -66,9 +66,9 @@ void PersistentConfig::print()
     Log.info("\tuploadBatchSize: %ld", data.uploadBatchSize);
     Log.info("\tmaxPubSize: %ld", data.maxPubSize);
     Log.info("\tdelayBeforeReboot: %ld", data.delayBeforeReboot);
-    Log.info("\heaterOnLengthSec: %ld", data.heaterOnLengthSec);
-    Log.info("\heaterOffLengthSec: %ld", data.heaterOffLengthSec);
-    Log.info("\countryVoltage: %ld", data.countryVoltage);
-    Log.info("\heaterPowerFactor: %ld", data.heaterPowerFactor);
+    Log.info("\theaterOnLengthSec: %ld", data.heaterOnLengthSec);
+    Log.info("\theaterOffLengthSec: %ld", data.heaterOffLengthSec);
+    Log.info("\tcountryVoltage: %ld", data.countryVoltage);
+    Log.info("\theaterPowerFactor: %ld", data.heaterPowerFactor);
     Log.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
 }
