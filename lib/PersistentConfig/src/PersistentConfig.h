@@ -7,7 +7,7 @@
 struct config
 {
     uint32_t version;
-    
+
     // v1
     uint32_t readPeriodMs;
     uint32_t uploadPeriodMs;
@@ -16,7 +16,7 @@ struct config
     uint32_t uploadBatchSize;
     uint32_t maxPubSize;
     uint32_t delayBeforeReboot;
-    
+
     // v2
     uint32_t heaterOnLengthSec;
     uint32_t heaterOffLengthSec;

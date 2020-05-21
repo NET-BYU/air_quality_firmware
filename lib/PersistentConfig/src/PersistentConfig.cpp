@@ -25,9 +25,10 @@ void PersistentConfig::load()
         log.info("Config has not been initialized.");
         log.info("Using default values");
         data = defaultConfig;
-        
+
         save();
     }
+
     // Migrate from v1 to v2
     else if (data.version == 1)
     {
@@ -36,7 +37,7 @@ void PersistentConfig::load()
         data.countryVoltage = defaultConfig.countryVoltage;
         data.heaterPowerFactor = defaultConfig.heaterPowerFactor;
         data.version = 2;
-        
+
         save();
     }
 }
