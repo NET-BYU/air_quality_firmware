@@ -78,8 +78,8 @@ bool pb_encode(pb_ostream_t *stream, const pb_msgdesc_t *fields, const void *src
  *                           protobuf implementations, so PB_ENCODE_DELIMITED
  *                           is a better option for compatibility.
  */
-#define PB_ENCODE_DELIMITED       0x02
-#define PB_ENCODE_NULLTERMINATED  0x04
+#define PB_ENCODE_DELIMITED       0x02U
+#define PB_ENCODE_NULLTERMINATED  0x04U
 bool pb_encode_ex(pb_ostream_t *stream, const pb_msgdesc_t *fields, const void *src_struct, unsigned int flags);
 
 /* Defines for backwards compatibility with code written before nanopb-0.4.0 */
@@ -163,6 +163,12 @@ bool pb_encode_fixed32(pb_ostream_t *stream, const void *value);
 /* Encode a fixed64, sfixed64 or double value.
  * You need to pass a pointer to a 8-byte wide C variable. */
 bool pb_encode_fixed64(pb_ostream_t *stream, const void *value);
+#endif
+
+#ifdef PB_CONVERT_DOUBLE_FLOAT
+/* Encode a float value so that it appears like a double in the encoded
+ * message. */
+bool pb_encode_float_as_double(pb_ostream_t *stream, float value);
 #endif
 
 /* Encode a submessage field.
