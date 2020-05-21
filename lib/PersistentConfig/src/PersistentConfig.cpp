@@ -27,10 +27,11 @@ void PersistentConfig::load()
         data = defaultConfig;
 
         save();
+        return;
     }
 
     // Migrate from v1 to v2
-    else if (data.version == 1)
+    if (data.version == 1)
     {
         data.heaterOnLengthSec = defaultConfig.heaterOnLengthSec;
         data.heaterOffLengthSec = defaultConfig.heaterOffLengthSec;
@@ -39,6 +40,7 @@ void PersistentConfig::load()
         data.version = 2;
 
         save();
+        return;
     }
 }
 
