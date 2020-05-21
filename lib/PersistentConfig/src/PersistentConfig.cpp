@@ -33,6 +33,7 @@ void PersistentConfig::load()
     // Migrate from v1 to v2
     if (data.version == 1)
     {
+        log.info("Converting v1 config to v2.");
         data.heaterOnLengthSec = defaultConfig.heaterOnLengthSec;
         data.heaterOffLengthSec = defaultConfig.heaterOffLengthSec;
         data.countryVoltage = defaultConfig.countryVoltage;
