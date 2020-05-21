@@ -18,7 +18,6 @@ struct v1
     uint32_t heaterOffLengthSec;
     uint32_t countryVoltage;
     uint32_t heaterPowerFactor;
-    uint32_t TEMP_battery_charge;
 };
 typedef struct v1 Config;
 
@@ -39,7 +38,7 @@ private:
     uint32_t address;
     void load();
 
-    Config v1Default = {1, 60000, 10000, 10000, 0, 10, 620, 2000, 0, 0, 120, 990, 200};
+    Config v1Default = {1, 60000, 10000, 10000, 0, 10, 620, 2000, 0, 0, 120, 990};
 };
 
 #endif
