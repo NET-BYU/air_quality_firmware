@@ -34,8 +34,6 @@ void PersistentConfig::load()
     if (data.version == 1)
     {
         log.info("Converting v1 config to v2.");
-        data.heaterOnLengthSec = defaultConfig.heaterOnLengthSec;
-        data.heaterOffLengthSec = defaultConfig.heaterOffLengthSec;
         data.countryVoltage = defaultConfig.countryVoltage;
         data.heaterPowerFactor = defaultConfig.heaterPowerFactor;
         data.version = 2;
@@ -67,8 +65,6 @@ void PersistentConfig::print()
     Log.info("\tuploadBatchSize: %ld", data.uploadBatchSize);
     Log.info("\tmaxPubSize: %ld", data.maxPubSize);
     Log.info("\tdelayBeforeReboot: %ld", data.delayBeforeReboot);
-    Log.info("\theaterOnLengthSec: %ld", data.heaterOnLengthSec);
-    Log.info("\theaterOffLengthSec: %ld", data.heaterOffLengthSec);
     Log.info("\tcountryVoltage: %ld", data.countryVoltage);
     Log.info("\theaterPowerFactor: %ld", data.heaterPowerFactor);
     Log.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");

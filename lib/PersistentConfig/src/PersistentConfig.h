@@ -18,8 +18,6 @@ struct config
     uint32_t delayBeforeReboot;
 
     // v2
-    uint32_t heaterOnLengthSec;
-    uint32_t heaterOffLengthSec;
     uint32_t countryVoltage;
     uint32_t heaterPowerFactor;
 };
@@ -42,7 +40,7 @@ private:
     uint32_t address;
     void load();
 
-    Config defaultConfig = {2, 60000, 10000, 10000, 0, 10, 620, 2000, 0, 0, 120, 990};
+    Config defaultConfig = {2, 60000, 10000, 10000, 0, 10, 620, 2000, 120, 990};
 };
 
 #endif
