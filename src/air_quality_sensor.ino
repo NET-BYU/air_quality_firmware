@@ -1293,39 +1293,6 @@ int cloudParameters(String arg)
         return Time.now();
     }
 
-    if (strncmp(command, "heaterOnLengthSec", commandLength) == 0)
-    {
-        if (settingValue)
-        {
-            Log.info("Updating heaterOnLengthSec (%ld)", value);
-            config.data.heaterOnLengthSec = value;
-            config.save();
-            config.print();
-            return 0;
-        }
-        else
-        {
-            return config.data.heaterOnLengthSec;
-        }
-    }
-
-    if (strncmp(command, "heaterOffLengthSec", commandLength) == 0)
-    {
-        if (settingValue)
-        {
-            Log.info("Updating heaterOffLengthSec (%ld)", value);
-            config.data.heaterOffLengthSec = value;
-            config.save();
-            config.print();
-            return 0;
-        }
-        else
-        {
-            return config.data.heaterOffLengthSec;
-        }
-    }
-
-    if(strncmp(command, "countryVoltage", commandLength) == 0)
     {
         if (settingValue)
         {

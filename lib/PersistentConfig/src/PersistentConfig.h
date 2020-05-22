@@ -4,9 +4,11 @@
 #include <stdint.h>
 #include <Particle.h>
 
-struct v1
+struct config
 {
     uint32_t version;
+
+    // v1
     uint32_t readPeriodMs;
     uint32_t uploadPeriodMs;
     uint32_t printSysInfoMs;
@@ -14,12 +16,12 @@ struct v1
     uint32_t uploadBatchSize;
     uint32_t maxPubSize;
     uint32_t delayBeforeReboot;
-    uint32_t heaterOnLengthSec;
-    uint32_t heaterOffLengthSec;
+
+    // v2
     uint32_t countryVoltage;
     uint32_t heaterPowerFactor;
 };
-typedef struct v1 Config;
+typedef struct config Config;
 
 class PersistentConfig
 {
@@ -38,7 +40,7 @@ private:
     uint32_t address;
     void load();
 
-    Config v1Default = {1, 60000, 10000, 10000, 0, 10, 620, 2000, 0, 0, 120, 990};
+    Config defaultConfig = {2, 60000, 10000, 10000, 0, 10, 620, 2000, 120, 990};
 };
 
 #endif
