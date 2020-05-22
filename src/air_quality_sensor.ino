@@ -973,7 +973,7 @@ void readSensors(SensorPacket *packet)
     }
     else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY)
     {
-        int32_t batteryCharge = (int32_t) System.batteryCharge();
+        int32_t batteryCharge = (int32_t) roundf(System.batteryCharge());
         Log.info("System.batteryCharge(): %ld%%", batteryCharge);  // This accurately retrieves battery percentage
         packet->has_battery_charge = true;
         packet->battery_charge = batteryCharge;
