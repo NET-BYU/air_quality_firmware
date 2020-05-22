@@ -964,6 +964,27 @@ void readSensors(SensorPacket *packet)
         resetReason = RESET_REASON_NONE;
     }
 
+    #if PLATFORM_ID == PLATFORM_BORON
+    if(DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
+    DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_UNKNOWN)
+    {
+        Log.warn("The battery is either disconnected or in an unknown state.");  // This accurately retrieves battery percentage
+        packet->has_battery_charge = false;
+    }
+    else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY)
+    {
+        int32_t batteryCharge = (int32_t) roundf(System.batteryCharge());
+        Log.info("System.batteryCharge(): %ld%%", batteryCharge);  // This accurately retrieves battery percentage
+        packet->has_battery_charge = true;
+        packet->battery_charge = batteryCharge;
+    }
+    else if(DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) != POWER_SOURCE_BATTERY)
+    {
+        Log.info("The sensor is plugged-in or connected via USB");
+        packet->has_battery_charge = false;
+    }
+    #endif
+
 #if Wiring_WiFi
     uint32_t freeMem = System.freeMemory();
     packet->free_memory = freeMem;
@@ -1322,7 +1343,6 @@ int cloudParameters(String arg)
 
     if(strncmp(command, "heaterPowerFactor", commandLength) == 0)
     {
-        Log.info("MADE IT HERE");
         if (settingValue)
         {
             Log.info("Updating heaterPowerFactor (%ld)", value);
