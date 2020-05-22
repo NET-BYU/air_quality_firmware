@@ -164,15 +164,11 @@ Timer connectingTimer(60000, checkConnecting);  // Time it will try to connect b
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
 
-#define SD_LOGGING 1
-#if SD_LOGGING
-SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
-#else
-SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
-                                             {"app.encode", LOG_LEVEL_INFO},
-                                             {"FileAckTracker", LOG_LEVEL_INFO},
-                                             {"MemoryAckTracker", LOG_LEVEL_TRACE}});
-#endif
+SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
+                                                                                         {"app.encode", LOG_LEVEL_INFO},
+                                                                                         {"FileAckTracker", LOG_LEVEL_INFO},
+                                                                                         {"MemoryAckTracker", LOG_LEVEL_TRACE}});
+
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
