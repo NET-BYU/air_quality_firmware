@@ -297,9 +297,7 @@ void setup()
     pmic.begin();
     #endif
 
-#if SD_LOGGING
     sdLogHandler.setup();
-#endif
 
     // Start timers
     readTimer.start();
@@ -527,9 +525,7 @@ void loop() // Print out RTC status in loop
         printSystemInfoFlag = false;
     }
 
-#if SD_LOGGING
     sdLogHandler.loop();
-#endif
 
     // Update LEDs
     sensorLed.Update();
