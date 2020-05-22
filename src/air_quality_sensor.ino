@@ -495,32 +495,6 @@ void loop() // Print out RTC status in loop
         uint32_t timestamp = now.unixtime();
         Log.info("Time is set to: %ld", timestamp);
     }
-
-    // Handle Trace heater
-    if (config.data.heaterOnLengthSec != 0)    // If the trace heater is NOT disabled
-    {
-        if (config.data.heaterOffLengthSec == 0 && traceHeaterState == TRACE_HEATER_OFF)   // If the trace heater is set to be ALWAYS ON, but it's off
-        {
-            traceHeaterState = TRACE_HEATER_ON;
-            digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
-        }
-        else if (config.data.heaterOffLengthSec > 0) //  && lastTraceHeaterToggle == 0 || heaterOnLengthSec != 0 && lastTraceHeaterToggle
-        {
-            uint32_t timeLimit = (traceHeaterState == TRACE_HEATER_ON) ? config.data.heaterOnLengthSec : config.data.heaterOffLengthSec;
-            uint32_t timestamp_now = rtc.now().unixtime();
-            if (lastTraceHeaterToggle == 0 || (timestamp_now - lastTraceHeaterToggle) > timeLimit)
-            {
-                traceHeaterState = !traceHeaterState;
-                digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
-                lastTraceHeaterToggle = timestamp_now;
-            }
-        }
-    }
-    else if (traceHeaterState == TRACE_HEATER_ON)
-    {
-        traceHeaterState = TRACE_HEATER_OFF;
-        digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
-    }
     
     // Battery detection and handling, for keeping 5V sensors on with 3V battery
     #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
