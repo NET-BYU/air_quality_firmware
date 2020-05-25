@@ -1,5 +1,4 @@
 #include "AckTracker.h"
-#include "ArduinoJson.h"
 #include "DiagnosticsHelperRK.h"
 #include "FileAckTracker.h"
 #include "MemoryAckTracker.h"
@@ -15,6 +14,8 @@
 #include "jled.h"
 #include "pb_encode.h"
 #include "sensor_packet.pb.h"
+
+#include "ArduinoJson.h"
 
 #if PLATFORM_ID == PLATFORM_ARGON
 PRODUCT_ID(9901);
