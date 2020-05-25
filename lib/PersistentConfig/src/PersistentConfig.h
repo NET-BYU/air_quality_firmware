@@ -1,11 +1,10 @@
 #ifndef PERSISTENT_CONFIG_H_
 #define PERSISTENT_CONFIG_H_
 
-#include <stdint.h>
 #include <Particle.h>
+#include <stdint.h>
 
-struct config
-{
+struct config {
     uint32_t version;
 
     // v1
@@ -23,9 +22,8 @@ struct config
 };
 typedef struct config Config;
 
-class PersistentConfig
-{
-public:
+class PersistentConfig {
+  public:
     PersistentConfig(uint32_t address);
     void save();
 
@@ -35,7 +33,7 @@ public:
 
     Config data;
 
-private:
+  private:
     Logger log;
     uint32_t address;
     void load();
