@@ -178,12 +178,20 @@ Timer connectingTimer(60000,
 // Logging
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
+Logger csvLog("app.csv");
 
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN,
                                     {{"app", LOG_LEVEL_INFO},
                                      {"app.encode", LOG_LEVEL_INFO},
                                      {"FileAckTracker", LOG_LEVEL_INFO},
                                      {"MemoryAckTracker", LOG_LEVEL_TRACE}});
+
+SdCardLogHandler<2048> csvLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_NONE,
+                                     {{"app.csv", LOG_LEVEL_INFO}});
+STARTUP(csvLogHandler.withDesiredFileSize(10000000000UL)
+            .withNoSerialLogging()
+            .withMaxFilesToKeep(1)
+            .withLogsDirName("CSV"));
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -301,6 +309,11 @@ void setup() {
 #endif
 
     sdLogHandler.setup();
+    csvLogHandler.setup();
+    csvLog.print(
+        "Timestamp,Sequence,Temperature,Humidity,RTC Temperature,PM1,PM2.5,PM4,PM10,SD Card "
+        "Present,Queue Size,CO2,CO,Voltage,Current,Energy,Power,Apparent Power,Reactive "
+        "Power,Power Factor,Free Memory,Reset Reason\n");
 
     // Start timers
     readTimer.start();
@@ -326,6 +339,7 @@ void loop() // Print out RTC status in loop
         Log.info("Reading sensors...");
         SensorPacket packet = SensorPacket_init_zero;
         readSensors(&packet);
+        csvLogPacket(&packet);
         printPacket(&packet);
 
         Log.info("Putting data into a protobuf...");
@@ -491,6 +505,7 @@ void loop() // Print out RTC status in loop
     }
 
     sdLogHandler.loop();
+    csvLogHandler.loop();
 
     // Update LEDs
     sensorLed.Update();
@@ -1175,6 +1190,137 @@ void printSystemInfo() {
     CellularSignal sig = Cellular.RSSI();
     Log.info("Cell quality: %d (%d)", sig.qual, sig.rssi);
 #endif // Wiring_Cellular
+}
+
+void csvLogPacket(SensorPacket *packet) {
+    char buffSize[50];
+    sprintf(buffSize, "%ld", packet->timestamp);
+    csvLog.print(buffSize);
+    csvLog.print(",");
+
+    sprintf(buffSize, "%ld", packet->sequence);
+    csvLog.print(buffSize);
+    csvLog.print(",");
+
+    if (packet->has_temperature) {
+        sprintf(buffSize, "%ld", packet->temperature);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_temperature) {
+        sprintf(buffSize, "%ld", packet->humidity);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_rtc_temperature) {
+        sprintf(buffSize, "%ld", packet->rtc_temperature);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_pm1) {
+        sprintf(buffSize, "%ld", packet->pm1);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_pm2_5) {
+        sprintf(buffSize, "%ld", packet->pm2_5);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_pm4) {
+        sprintf(buffSize, "%ld", packet->pm4);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_pm10) {
+        sprintf(buffSize, "%ld", packet->pm10);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_card_present) {
+        sprintf(buffSize, "%ld", packet->card_present);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_queue_size) {
+        sprintf(buffSize, "%ld", packet->queue_size);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_co2) {
+        sprintf(buffSize, "%ld", packet->co2);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_co) {
+        sprintf(buffSize, "%ld", packet->co);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_voltage) {
+        sprintf(buffSize, "%ld", packet->voltage);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_current) {
+        sprintf(buffSize, "%ld", packet->current);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_total_energy) {
+        sprintf(buffSize, "%ld", packet->total_energy);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_power) {
+        sprintf(buffSize, "%ld", packet->power);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_apparent_power) {
+        sprintf(buffSize, "%ld", packet->apparent_power);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_reactive_power) {
+        sprintf(buffSize, "%ld", packet->reactive_power);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_power_factor) {
+        sprintf(buffSize, "%ld", packet->power_factor);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_free_memory) {
+        sprintf(buffSize, "%ld", packet->free_memory);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+
+    if (packet->has_reset_reason) {
+        sprintf(buffSize, "%ld", packet->reset_reason);
+        csvLog.print(buffSize);
+    }
+    csvLog.print("\n");
 }
 
 void printPacket(SensorPacket *packet) {
