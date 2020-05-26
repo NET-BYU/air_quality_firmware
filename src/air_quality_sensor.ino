@@ -15,6 +15,7 @@
 #include "SdCardLogHandlerRK.h"
 #include "adafruit-sht31.h"
 #include "DiagnosticsHelperRK.h"
+#include <math.h>
 
 #if PLATFORM_ID == PLATFORM_ARGON
 PRODUCT_ID(9901);
@@ -27,22 +28,10 @@ PRODUCT_VERSION(3);
 #endif
 
 // Trace Heater
+#define TRACE_HEATER_BOARD_TAU 1061 // 1592
 #define TRACE_HEATER_PIN D7
 #define TRACE_HEATER_ON LOW     // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
 #define TRACE_HEATER_OFF HIGH
-/*
-                -----------------------------------------
-                | offLengthSec = 0  | offLengthSec > 0  |
----------------------------------------------------------
-onLengthSec = 0 | heater disabled   | heater disabled   |
-onLengthSec > 0 | heater always on  | heater uses timer |
----------------------------------------------------------
- */
-// onLengthSec and offLengthSec can be changed with a cloud function
-// uint32_t heaterOnLengthSec = 0;    // The number of seconds the trace heater should be on
-// uint32_t heaterOffLengthSec = 0;   // The number of seconds the trace heater should be off
-uint8_t traceHeaterState = TRACE_HEATER_OFF;    // Whether the trace heater is currently on or off
-uint32_t lastTraceHeaterToggle = 0; // The unix epoch timestamp of the last time the trace heater toggled states. 0 means it was never toggled.
 
 // Energy Sensor Stuff
 #define ENERGY_SENSOR_PRESENT_PIN D6
@@ -154,6 +143,31 @@ Timer resetTimer(config.data.delayBeforeReboot, resetDevice, true);  // Periodic
 bool updateRTCFlag = false;
 Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
 
+bool heaterFlag = true;
+#define DEFAULT_BOARD_TAU 1592
+#define TRACE_HEATER_SAFETY_MAX_TEMP 39.0
+#define TRACE_HEATER_TIMER_PERIOD 5000
+#define TRACE_HEATER_COOL_PERIOD 30000  // Must be divisible by TRACE_HEATER_TIMER_PERIOD
+#define TRACE_HEATER_COOL_CYCLE_COUNT (TRACE_HEATER_COOL_PERIOD / TRACE_HEATER_TIMER_PERIOD)
+#define TRACE_HEATER_DELTA 1.0
+#define TRACE_HEATER_DELTA_MULTIPLIER 12.0
+#define ALLOWED_COMPARE_ERROR 0.01
+#define ALLOWED_AIM_ERROR 1.0
+Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() {heaterFlag = true;});
+
+typedef enum trace_heater_st_e {
+    TRACE_INIT,         // Turn off the trace heater, measure initial temperature
+    TRACE_AIM,          // Calculate target temperature, turn on/off heater, wait until target temperature reached
+    TRACE_COOL,         // Turn off the trace heater, wait TRACE_HEATER_COOL_PERIOD milliseconds
+    TRACE_COMPARE_CALC  // See whether the ambient temperature was too high or too low
+} trace_heater_st_t;
+
+trace_heater_st_t trace_heater_st = TRACE_INIT;
+
+bool newTemperatureData = false;
+
+float temperatureData = 0.0;
+
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
 Timer connectingTimer(60000, checkConnecting);  // Time it will try to connect before reseting the device
@@ -163,13 +177,15 @@ Timer connectingTimer(60000, checkConnecting);  // Time it will try to connect b
 // Logging
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
+Logger heaterLog("app.heater");
 
 #define SD_LOGGING 1
 #if SD_LOGGING
-SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}});
+SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO}, {"app.encode", LOG_LEVEL_INFO}, {"app.heater", LOG_LEVEL_INFO}});
 #else
 SerialLogHandler logHandler(LOG_LEVEL_WARN, {{"app", LOG_LEVEL_INFO},
                                              {"app.encode", LOG_LEVEL_INFO},
+                                             {"app.heater", LOG_LEVEL_INFO},
                                              {"FileAckTracker", LOG_LEVEL_INFO},
                                              {"MemoryAckTracker", LOG_LEVEL_TRACE}});
 #endif
@@ -201,6 +217,88 @@ float readACCurrentValue()
   ACCurrtntValue = voltageVirtualValue * ACTectionRange;
 
   return ACCurrtntValue;
+}
+
+void trace_heater_tick()
+{
+    static float temp_amb = 0.0;
+    static float temp_target = 10.0;
+    static uint16_t elapsed_cool_cycles = 0;
+    float temp_m = 0.0;
+    float temp_e = 0.0;
+    switch (trace_heater_st)
+    {
+        case TRACE_INIT:
+            heaterLog.info("Heater State: TRACE_INIT");
+            digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
+            temp_amb = sht31.readTemperature();
+            heaterLog.info("initial temperature is %f", temp_amb);
+            trace_heater_st = TRACE_AIM;
+        case TRACE_AIM:
+            heaterLog.info("Heater State: TRACE_AIM");
+            temp_target = temp_amb + 11.0;  // Aiming for 11 degrees higher often gives us about 10 degrees higher
+            if (temp_target > TRACE_HEATER_SAFETY_MAX_TEMP) temp_target = TRACE_HEATER_SAFETY_MAX_TEMP;
+            temp_m = sht31.readTemperature();
+            heaterLog.info("Heater attempting to reach target %f, current temp is %f", temp_target, temp_m);
+            if (temp_target > (temp_m + ALLOWED_AIM_ERROR))
+            {
+                digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_ON);
+                heaterLog.info("Heating up to reach target temperature!");
+                trace_heater_st = TRACE_AIM;
+                break;
+            }
+            else if (temp_target < (temp_m - ALLOWED_AIM_ERROR))
+            {
+                digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
+                heaterLog.info("Cooling down to reach target temperature!");
+                trace_heater_st = TRACE_AIM;
+                break;
+            }
+            else
+            {
+                heaterLog.info("Target temperature reached");
+                trace_heater_st = TRACE_COOL;
+                elapsed_cool_cycles = 0;
+                temp_target = temp_m;
+            }
+        case TRACE_COOL:
+            heaterLog.info("Heater State: TRACE_COOL");
+            digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
+            if (elapsed_cool_cycles < TRACE_HEATER_COOL_CYCLE_COUNT)
+            {
+                elapsed_cool_cycles++;
+                trace_heater_st = TRACE_COOL;
+                break;
+            }
+            else
+            {
+                trace_heater_st = TRACE_COMPARE_CALC;
+            }
+        case TRACE_COMPARE_CALC:
+            heaterLog.info("Heater State: TRACE_COMPARE_CALC");
+            temp_e = (temp_amb - temp_target) * (1 - exp(-(TRACE_HEATER_COOL_PERIOD / 1000.0) / ((float) DEFAULT_BOARD_TAU))) + temp_target;
+            temp_m = sht31.readTemperature();
+            heaterLog.info("Heater: temp_e = %f, temp_m = %f", temp_e, temp_m);
+            if (temp_m < (temp_e - ALLOWED_COMPARE_ERROR))
+            {
+                heaterLog.info("Heater: Too hot! Cooling down.");
+                temp_amb -= TRACE_HEATER_DELTA;
+            }
+            else if (temp_m > (temp_e + ALLOWED_COMPARE_ERROR))
+            {
+                heaterLog.info("Heater: Too cold! Heating up.");
+                temp_amb += TRACE_HEATER_DELTA;
+            }
+            else
+            {
+                heaterLog.info("Heater: Just right! Temperature is 10 degrees above ambient.");
+                temp_amb = temp_m - 10.0;
+                newTemperatureData = true;
+                temperatureData = temp_amb;
+            }
+            trace_heater_st = TRACE_AIM;
+            
+    }
 }
 
 void setup()
@@ -500,30 +598,14 @@ void loop() // Print out RTC status in loop
         Log.info("Time is set to: %ld", timestamp);
     }
 
-    // Handle Trace heater
-    if (config.data.heaterOnLengthSec != 0)    // If the trace heater is NOT disabled
+    if (heaterFlag)
     {
-        if (config.data.heaterOffLengthSec == 0 && traceHeaterState == TRACE_HEATER_OFF)   // If the trace heater is set to be ALWAYS ON, but it's off
+        Log.info("handling heater!");
+        if (config.data.heaterEnabled)
         {
-            traceHeaterState = TRACE_HEATER_ON;
-            digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
+            trace_heater_tick();
         }
-        else if (config.data.heaterOffLengthSec > 0) //  && lastTraceHeaterToggle == 0 || heaterOnLengthSec != 0 && lastTraceHeaterToggle
-        {
-            uint32_t timeLimit = (traceHeaterState == TRACE_HEATER_ON) ? config.data.heaterOnLengthSec : config.data.heaterOffLengthSec;
-            uint32_t timestamp_now = rtc.now().unixtime();
-            if (lastTraceHeaterToggle == 0 || (timestamp_now - lastTraceHeaterToggle) > timeLimit)
-            {
-                traceHeaterState = !traceHeaterState;
-                digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
-                lastTraceHeaterToggle = timestamp_now;
-            }
-        }
-    }
-    else if (traceHeaterState == TRACE_HEATER_ON)
-    {
-        traceHeaterState = TRACE_HEATER_OFF;
-        digitalWrite(TRACE_HEATER_PIN, traceHeaterState);
+        heaterFlag = false;
     }
     
     // Battery detection and handling, for keeping 5V sensors on with 3V battery
@@ -822,9 +904,12 @@ void readSensors(SensorPacket *packet)
         packet->co2 = co2;
         packet->has_co2 = true;
 
-        float temp = airSensor.getTemperature();
-        packet->temperature = (int32_t)round(temp * 10);
-        packet->has_temperature = true;
+        if (!config.data.heaterEnabled)
+        {
+            float temp = airSensor.getTemperature();
+            packet->temperature = (int32_t)round(temp * 10);
+            packet->has_temperature = true;
+        }
 
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
@@ -840,10 +925,12 @@ void readSensors(SensorPacket *packet)
 
     if (tempHumPresent)
     {
-        float temp = sht31.readTemperature();
-        packet->temperature = (int32_t)round(temp * 10);
-        packet->has_temperature = true;
-
+        if (!config.data.heaterEnabled)
+        {
+            float temp = sht31.readTemperature();
+            packet->temperature = (int32_t)round(temp * 10);
+            packet->has_temperature = true;
+        }
         float humidity = sht31.readHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
@@ -853,6 +940,13 @@ void readSensors(SensorPacket *packet)
     else
     {
         sht31.begin(TEMP_HUM_I2C_ADDR);
+    }
+
+    if (config.data.heaterEnabled && newTemperatureData)
+    {
+        packet->temperature = (int32_t)round(temperatureData * 10);
+        packet->has_temperature = true;
+        newTemperatureData = false;
     }
 
     #if PLATFORM_ID == PLATFORM_BORON
@@ -1272,37 +1366,22 @@ int cloudParameters(String arg)
         return Time.now();
     }
 
-    if (strncmp(command, "heaterOnLengthSec", commandLength) == 0)
+    if (strncmp(command, "heaterEnabled", commandLength) == 0)
     {
         if (settingValue)
         {
-            Log.info("Updating heaterOnLengthSec (%ld)", value);
-            config.data.heaterOnLengthSec = value;
+            Log.info("Setting heaterEnabled to %ld", value);
+            config.data.heaterEnabled = value;
             config.save();
             config.print();
             return 0;
         }
         else
         {
-            return config.data.heaterOnLengthSec;
+            return config.data.heaterEnabled;
         }
     }
 
-    if (strncmp(command, "heaterOffLengthSec", commandLength) == 0)
-    {
-        if (settingValue)
-        {
-            Log.info("Updating heaterOffLengthSec (%ld)", value);
-            config.data.heaterOffLengthSec = value;
-            config.save();
-            config.print();
-            return 0;
-        }
-        else
-        {
-            return config.data.heaterOffLengthSec;
-        }
-    }
 
     if(strncmp(command, "countryVoltage", commandLength) == 0)
     {
