@@ -9,12 +9,12 @@
 #include "SdCardLogHandlerRK.h"
 #include "SdFat.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
+#include "TraceHeater.h"
 #include "adafruit-sht31.h"
 #include "base85.h"
 #include "jled.h"
 #include "pb_encode.h"
 #include "sensor_packet.pb.h"
-#include <math.h>
 
 #include "ArduinoJson.h"
 
@@ -28,8 +28,7 @@ PRODUCT_ID(9861);
 PRODUCT_VERSION(3);
 #endif
 
-// Trace Heater
-#define TRACE_HEATER_BOARD_TAU 1061 // 1592
+// Trace Heater Stuff
 #define TRACE_HEATER_PIN D7
 #define TRACE_HEATER_ON                                                                            \
     LOW // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
@@ -156,31 +155,8 @@ Timer resetTimer(
 bool updateRTCFlag = false;
 Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
 
-bool heaterFlag = true;
-#define DEFAULT_BOARD_TAU 1592
-#define TRACE_HEATER_SAFETY_MAX_TEMP 39.0
-#define TRACE_HEATER_TIMER_PERIOD 5000
-#define TRACE_HEATER_COOL_PERIOD 30000 // Must be divisible by TRACE_HEATER_TIMER_PERIOD
-#define TRACE_HEATER_COOL_CYCLE_COUNT (TRACE_HEATER_COOL_PERIOD / TRACE_HEATER_TIMER_PERIOD)
-#define TRACE_HEATER_DELTA 1.0
-#define TRACE_HEATER_DELTA_MULTIPLIER 12.0
-#define ALLOWED_COMPARE_ERROR 0.01
-#define ALLOWED_AIM_ERROR 1.0
-Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() { heaterFlag = true; });
-
-typedef enum trace_heater_st_e {
-    TRACE_INIT, // Turn off the trace heater, measure initial temperature
-    TRACE_AIM,  // Calculate target temperature, turn on/off heater, wait until target temperature
-                // reached
-    TRACE_COOL, // Turn off the trace heater, wait TRACE_HEATER_COOL_PERIOD milliseconds
-    TRACE_COMPARE_CALC // See whether the ambient temperature was too high or too low
-} trace_heater_st_t;
-
-trace_heater_st_t trace_heater_st = TRACE_INIT;
-
-bool newTemperatureData = false;
-
-float temperatureData = 0.0;
+bool handleHeaterFlag = true;
+Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() { handleHeaterFlag = true; });
 
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
@@ -205,6 +181,10 @@ SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
+TraceHeater traceHeater([]() { return sht31.readTemperature(); },
+                        []() { digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_ON); },
+                        []() { digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF); }, &heaterLog);
+
 float readACCurrentValue() {
     float ACCurrtntValue = 0;
     int32_t peakVoltage = 0;
@@ -226,77 +206,6 @@ float readACCurrentValue() {
     ACCurrtntValue = voltageVirtualValue * ACTectionRange;
 
     return ACCurrtntValue;
-}
-
-void trace_heater_tick() {
-    static float temp_amb = 0.0;
-    static float temp_target = 10.0;
-    static uint16_t elapsed_cool_cycles = 0;
-    float temp_m = 0.0;
-    float temp_e = 0.0;
-    switch (trace_heater_st) {
-    case TRACE_INIT:
-        heaterLog.info("Heater State: TRACE_INIT");
-        digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
-        temp_amb = sht31.readTemperature();
-        heaterLog.info("initial temperature is %f", temp_amb);
-        trace_heater_st = TRACE_AIM;
-    case TRACE_AIM:
-        heaterLog.info("Heater State: TRACE_AIM");
-        temp_target =
-            temp_amb + 11.0; // Aiming for 11 degrees higher often gives us about 10 degrees higher
-        if (temp_target > TRACE_HEATER_SAFETY_MAX_TEMP)
-            temp_target = TRACE_HEATER_SAFETY_MAX_TEMP;
-        temp_m = sht31.readTemperature();
-        heaterLog.info("Heater attempting to reach target %f, current temp is %f", temp_target,
-                       temp_m);
-        if (temp_target > (temp_m + ALLOWED_AIM_ERROR)) {
-            digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_ON);
-            heaterLog.info("Heating up to reach target temperature!");
-            trace_heater_st = TRACE_AIM;
-            break;
-        } else if (temp_target < (temp_m - ALLOWED_AIM_ERROR)) {
-            digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
-            heaterLog.info("Cooling down to reach target temperature!");
-            trace_heater_st = TRACE_AIM;
-            break;
-        } else {
-            heaterLog.info("Target temperature reached");
-            trace_heater_st = TRACE_COOL;
-            elapsed_cool_cycles = 0;
-            temp_target = temp_m;
-        }
-    case TRACE_COOL:
-        heaterLog.info("Heater State: TRACE_COOL");
-        digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
-        if (elapsed_cool_cycles < TRACE_HEATER_COOL_CYCLE_COUNT) {
-            elapsed_cool_cycles++;
-            trace_heater_st = TRACE_COOL;
-            break;
-        } else {
-            trace_heater_st = TRACE_COMPARE_CALC;
-        }
-    case TRACE_COMPARE_CALC:
-        heaterLog.info("Heater State: TRACE_COMPARE_CALC");
-        temp_e = (temp_amb - temp_target) *
-                     (1 - exp(-(TRACE_HEATER_COOL_PERIOD / 1000.0) / ((float)DEFAULT_BOARD_TAU))) +
-                 temp_target;
-        temp_m = sht31.readTemperature();
-        heaterLog.info("Heater: temp_e = %f, temp_m = %f", temp_e, temp_m);
-        if (temp_m < (temp_e - ALLOWED_COMPARE_ERROR)) {
-            heaterLog.info("Heater: Too hot! Cooling down.");
-            temp_amb -= TRACE_HEATER_DELTA;
-        } else if (temp_m > (temp_e + ALLOWED_COMPARE_ERROR)) {
-            heaterLog.info("Heater: Too cold! Heating up.");
-            temp_amb += TRACE_HEATER_DELTA;
-        } else {
-            heaterLog.info("Heater: Just right! Temperature is 10 degrees above ambient.");
-            temp_amb = temp_m - 10.0;
-            newTemperatureData = true;
-            temperatureData = temp_amb;
-        }
-        trace_heater_st = TRACE_AIM;
-    }
 }
 
 void setup() {
@@ -551,12 +460,12 @@ void loop() // Print out RTC status in loop
         Log.info("Time is set to: %ld", timestamp);
     }
 
-    if (heaterFlag) {
+    if (handleHeaterFlag) {
         Log.info("handling heater!");
         if (config.data.heaterEnabled) {
-            trace_heater_tick();
+            traceHeater.tick();
         }
-        heaterFlag = false;
+        handleHeaterFlag = false;
     }
 
     // Battery detection and handling, for keeping 5V sensors on with 3V battery
@@ -843,10 +752,9 @@ void readSensors(SensorPacket *packet) {
         sht31.begin(TEMP_HUM_I2C_ADDR);
     }
 
-    if (config.data.heaterEnabled && newTemperatureData) {
-        packet->temperature = (int32_t)round(temperatureData * 10);
+    if (config.data.heaterEnabled && traceHeater.hasNewTemperatureData()) {
+        packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
         packet->has_temperature = true;
-        newTemperatureData = false;
     }
 
 #if PLATFORM_ID == PLATFORM_BORON
@@ -1215,6 +1123,12 @@ int cloudParameters(String arg) {
 
     if (strncmp(command, "particleTime", commandLength) == 0) {
         return Time.now();
+    }
+
+    if (strncmp(command, "resetHeater", commandLength) == 0) {
+        Log.info("Resetting Trace Heater");
+        traceHeater.reset();
+        return 0;
     }
 
     if (strncmp(command, "heaterEnabled", commandLength) == 0) {
