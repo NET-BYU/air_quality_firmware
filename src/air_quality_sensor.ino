@@ -188,9 +188,9 @@ SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVE
 
 SdCardLogHandler<2048> csvLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_NONE,
                                      {{"app.csv", LOG_LEVEL_INFO}});
-STARTUP(csvLogHandler.withDesiredFileSize(10000000000UL)
+STARTUP(csvLogHandler.withDesiredFileSize(1000000UL)
             .withNoSerialLogging()
-            .withMaxFilesToKeep(1)
+            .withMaxFilesToKeep(1000)
             .withLogsDirName("CSV"));
 
 // Particle system stuff
