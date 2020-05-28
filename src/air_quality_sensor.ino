@@ -1215,6 +1215,7 @@ void csvLogPacket(SensorPacket *packet) {
     csvLogToFile(packet->has_pm10, packet->pm10);
     csvLogToFile(true, (int32_t)packet->has_card_present);
     csvLogToFile(packet->has_queue_size, packet->queue_size);
+    csvLogToFile(packet->has_battery_charge, packet->battery_charge);
     csvLogToFile(packet->has_co2, packet->co2);
     csvLogToFile(packet->has_co, packet->co);
     csvLogToFile(packet->has_voltage, packet->voltage);
@@ -1248,6 +1249,7 @@ void printPacket(SensorPacket *packet) {
     printPacketToLog("PM10", packet->has_pm10, packet->pm10);
     printPacketToLog("Card present", true, packet->has_card_present);
     printPacketToLog("Queue size", packet->has_queue_size, packet->queue_size);
+    printPacketToLog("Battery Charge (%)", packet->has_battery_charge, packet->battery_charge);
     printPacketToLog("CO2", packet->has_co2, packet->co2);
     printPacketToLog("CO", packet->has_co, packet->co);
     printPacketToLog("Voltage", packet->has_voltage, packet->voltage);
