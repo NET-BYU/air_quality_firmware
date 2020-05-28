@@ -714,6 +714,13 @@ void readSensors(SensorPacket *packet) {
 
     if (pmSensor.dataAvailable()) {
         pmSensor.getMass(pmMeasurement);
+
+        for (size_t i = 0; i < sizeof(pmMeasurement) / sizeof(pmMeasurement[0]); i++) {
+            if (pmMeasurement[i] > INT32_MAX) {
+                pmMeasurement[i] = INT32_MAX;
+            }
+        }
+
         packet->pm1 = pmMeasurement[0];
         packet->has_pm1 = true;
         packet->pm2_5 = pmMeasurement[1];
