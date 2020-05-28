@@ -1185,134 +1185,39 @@ void printSystemInfo() {
 #endif // Wiring_Cellular
 }
 
+#define MAX_ATTR_LEN 20
+void csvLogToFile(bool has_attr, int32_t reading) {
+    char buffSize[MAX_ATTR_LEN];
+    if (has_attr) {
+        sprintf(buffSize, "%ld", reading);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+}
+
 void csvLogPacket(SensorPacket *packet) {
-    char buffSize[50];
-    sprintf(buffSize, "%ld", packet->timestamp);
-    csvLog.print(buffSize);
-    csvLog.print(",");
-
-    sprintf(buffSize, "%ld", packet->sequence);
-    csvLog.print(buffSize);
-    csvLog.print(",");
-
-    if (packet->has_temperature) {
-        sprintf(buffSize, "%ld", packet->temperature);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_temperature) {
-        sprintf(buffSize, "%ld", packet->humidity);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_rtc_temperature) {
-        sprintf(buffSize, "%ld", packet->rtc_temperature);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_pm1) {
-        sprintf(buffSize, "%ld", packet->pm1);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_pm2_5) {
-        sprintf(buffSize, "%ld", packet->pm2_5);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_pm4) {
-        sprintf(buffSize, "%ld", packet->pm4);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_pm10) {
-        sprintf(buffSize, "%ld", packet->pm10);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_card_present) {
-        sprintf(buffSize, "%ld", packet->card_present);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_queue_size) {
-        sprintf(buffSize, "%ld", packet->queue_size);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_co2) {
-        sprintf(buffSize, "%ld", packet->co2);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_co) {
-        sprintf(buffSize, "%ld", packet->co);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_voltage) {
-        sprintf(buffSize, "%ld", packet->voltage);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_current) {
-        sprintf(buffSize, "%ld", packet->current);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_total_energy) {
-        sprintf(buffSize, "%ld", packet->total_energy);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_power) {
-        sprintf(buffSize, "%ld", packet->power);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_apparent_power) {
-        sprintf(buffSize, "%ld", packet->apparent_power);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_reactive_power) {
-        sprintf(buffSize, "%ld", packet->reactive_power);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_power_factor) {
-        sprintf(buffSize, "%ld", packet->power_factor);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_free_memory) {
-        sprintf(buffSize, "%ld", packet->free_memory);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_reset_reason) {
-        sprintf(buffSize, "%ld", packet->reset_reason);
-        csvLog.print(buffSize);
-    }
+    csvLogToFile(true, packet->timestamp);
+    csvLogToFile(true, packet->sequence);
+    csvLogToFile(packet->has_temperature, packet->temperature);
+    csvLogToFile(packet->has_temperature, packet->humidity);
+    csvLogToFile(packet->has_rtc_temperature, packet->rtc_temperature);
+    csvLogToFile(packet->has_pm1, packet->pm1);
+    csvLogToFile(packet->has_pm2_5, packet->pm2_5);
+    csvLogToFile(packet->has_pm4, packet->pm4);
+    csvLogToFile(packet->has_pm10, packet->pm10);
+    csvLogToFile(packet->has_card_present, (int32_t)packet->has_card_present);
+    csvLogToFile(packet->has_queue_size, packet->queue_size);
+    csvLogToFile(packet->has_co2, packet->co2);
+    csvLogToFile(packet->has_co, packet->co);
+    csvLogToFile(packet->has_voltage, packet->voltage);
+    csvLogToFile(packet->has_current, packet->current);
+    csvLogToFile(packet->has_total_energy, packet->total_energy);
+    csvLogToFile(packet->has_power, packet->power);
+    csvLogToFile(packet->has_apparent_power, packet->apparent_power);
+    csvLogToFile(packet->has_reactive_power, packet->reactive_power);
+    csvLogToFile(packet->has_power_factor, packet->power_factor);
+    csvLogToFile(packet->has_free_memory, packet->free_memory);
+    csvLogToFile(packet->has_reset_reason, packet->reset_reason);
     csvLog.print("\n");
 }
 
