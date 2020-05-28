@@ -1,5 +1,4 @@
 #include "TraceHeater.h"
-#include "SdCardLogHandlerRK.h"
 
 static Logger heaterLog("TraceHeater");
 
