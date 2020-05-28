@@ -1,12 +1,15 @@
 #ifndef TRACE_HEATER_H_
 #define TRACE_HEATER_H_
 
-#include "SdCardLogHandlerRK.h"
+#include "application.h"
+#include <cstdint>
 #include <math.h>
 
 // Trace Heater
-#define TRACE_HEATER_BOARD_TAU 1061 // 1592
-#define TRACE_HEATER_DEFAULT_BOARD_TAU 1592
+#define TRACE_HEATER_PIN D7
+#define TRACE_HEATER_ON                                                                            \
+    LOW // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
+#define TRACE_HEATER_BOARD_TAU 1061 // Originally calculated to be 1592, but wasn't quite right
 #define TRACE_HEATER_SAFETY_MAX_TEMP 39.0
 #define TRACE_HEATER_TIMER_PERIOD 5000 // Cal tick() every TRACE_HEATER_TIMER_PERIOD milliseconds
 #define TRACE_HEATER_COOL_PERIOD 30000 // Must be divisible by TRACE_HEATER_TIMER_PERIOD
@@ -26,18 +29,21 @@ typedef enum trace_heater_st_e {
 
 class TraceHeater {
   public:
-    TraceHeater(float (*read_temp_funct)(void), void (*turn_on_heater_funct)(),
-                void (*turn_off_heater_funct)(), Logger *heaterLog);
+    TraceHeater(float (*read_temp_funct)(void), uint16_t heat_pin, uint8_t on_value);
+    TraceHeater(float (*read_temp_funct)(void));
     void tick();
     bool hasNewTemperatureData();
     float getTemperatureData();
     void reset();
+    void begin();
 
   private:
     float (*read_temp_funct)(void);
-    void (*turn_on_heater_funct)();
-    void (*turn_off_heater_funct)();
-    Logger *heaterLog;
+    // void (*turn_on_heater_funct)();
+    // void (*turn_off_heater_funct)();
+    uint16_t heat_pin = TRACE_HEATER_PIN;
+    uint8_t on_value = TRACE_HEATER_ON;
+    uint8_t off_value = !TRACE_HEATER_ON;
     trace_heater_st_t trace_heater_st = TRACE_INIT;
     bool has_new_data = false;
     float temperature_data = 0.0;

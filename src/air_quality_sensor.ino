@@ -28,12 +28,6 @@ PRODUCT_ID(9861);
 PRODUCT_VERSION(3);
 #endif
 
-// Trace Heater Stuff
-#define TRACE_HEATER_PIN D7
-#define TRACE_HEATER_ON                                                                            \
-    LOW // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
-#define TRACE_HEATER_OFF HIGH
-
 // Energy Sensor Stuff
 #define ENERGY_SENSOR_PRESENT_PIN D6
 #define AC_PIN A0         // set arduino signal read pin
@@ -181,9 +175,7 @@ SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
-TraceHeater traceHeater([]() { return sht31.readTemperature(); },
-                        []() { digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_ON); },
-                        []() { digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF); }, &heaterLog);
+TraceHeater traceHeater([]() { return sht31.readTemperature(); });
 
 float readACCurrentValue() {
     float ACCurrtntValue = 0;
@@ -285,9 +277,7 @@ void setup() {
         tempHumPresent = false;
     }
 
-    // Set the Trace heeater to be initially off
-    pinMode(TRACE_HEATER_PIN, OUTPUT);
-    digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
+    traceHeater.begin();
 
     delay(1000);
 
