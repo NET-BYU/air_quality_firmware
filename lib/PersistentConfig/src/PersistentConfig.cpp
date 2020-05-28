@@ -24,12 +24,20 @@ void PersistentConfig::load() {
         return;
     }
 
-    // Migrate from v1 to v2
-    if (data.version == 1) {
-        log.info("Converting v1 config to v2.");
-        data.countryVoltage = defaultConfig.countryVoltage;
-        data.heaterPowerFactor = defaultConfig.heaterPowerFactor;
-        data.version = 2;
+    // Migrate from older versions to v3
+    if (data.version <= 2) {
+        if (data.version == 1) {
+            log.info("Converting v1 config to v2.");
+            data.countryVoltage = defaultConfig.countryVoltage;
+            data.heaterPowerFactor = defaultConfig.heaterPowerFactor;
+            data.version = 2;
+        }
+        if (data.version == 2) {
+            log.info("Converting v2 config to v3.");
+            data.traceHeaterEnabled = defaultConfig.traceHeaterEnabled;
+            data.boardTimeConstant = defaultConfig.boardTimeConstant;
+            data.version = 3;
+        }
 
         save();
         return;

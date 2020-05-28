@@ -9,7 +9,8 @@
 #define TRACE_HEATER_PIN D7
 #define TRACE_HEATER_ON                                                                            \
     LOW // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
-#define TRACE_HEATER_BOARD_TAU 1061 // Originally calculated to be 1592, but wasn't quite right
+#define TRACE_HEATER_DEFAULT_BOARD_TAU                                                             \
+    1061 // Originally calculated to be 1592, but wasn't quite right
 #define TRACE_HEATER_SAFETY_MAX_TEMP 39.0
 #define TRACE_HEATER_TIMER_PERIOD 5000 // Cal tick() every TRACE_HEATER_TIMER_PERIOD milliseconds
 #define TRACE_HEATER_COOL_PERIOD 30000 // Must be divisible by TRACE_HEATER_TIMER_PERIOD
@@ -29,8 +30,9 @@ typedef enum trace_heater_st_e {
 
 class TraceHeater {
   public:
-    TraceHeater(float (*read_temp_funct)(void), uint16_t heat_pin, uint8_t on_value);
-    TraceHeater(float (*read_temp_funct)(void));
+    TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void), uint16_t heat_pin,
+                uint8_t on_value);
+    TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void));
     void tick();
     bool hasNewTemperatureData();
     float getTemperatureData();
@@ -39,7 +41,7 @@ class TraceHeater {
 
   private:
     float getExpectedTemperature(
-        float boardTimeConst, float elapsedTimeSec, float ambientTemp,
+        float elapsedTimeSec, float ambientTemp,
         float initTemp); // Calculate what the board temperature should be after the given elapsed
                          // time and the estimated time constant, ambient temperature, and the
                          // measured initial temperature
@@ -55,6 +57,7 @@ class TraceHeater {
     float temp_amb = 0.0;
     float temp_target = 10.0;
     uint16_t elapsed_cool_cycles = 0;
+    uint32_t tau = TRACE_HEATER_DEFAULT_BOARD_TAU;
 };
 
 #endif

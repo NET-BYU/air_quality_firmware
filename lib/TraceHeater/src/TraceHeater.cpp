@@ -3,14 +3,17 @@
 
 static Logger heaterLog("TraceHeater");
 
-TraceHeater::TraceHeater(float (*read_temp_funct)(void), uint16_t heat_pin, uint8_t on_value) {
+TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void),
+                         uint16_t heat_pin, uint8_t on_value) {
+    this->tau = board_time_const;
     this->read_temp_funct = read_temp_funct;
     this->heat_pin = heat_pin;
     this->on_value = on_value;
     this->off_value = !on_value;
 }
 
-TraceHeater::TraceHeater(float (*read_temp_funct)(void)) {
+TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void)) {
+    this->tau = board_time_const;
     this->read_temp_funct = read_temp_funct;
     this->heat_pin = TRACE_HEATER_PIN;
     this->on_value = TRACE_HEATER_ON;
@@ -70,8 +73,7 @@ void TraceHeater::tick() {
         }
     case TRACE_COMPARE_CALC:
         heaterLog.info("Heater State: TRACE_COMPARE_CALC");
-        temp_e = getExpectedTemperature(TRACE_HEATER_BOARD_TAU, TRACE_HEATER_COOL_PERIOD / 1000.0,
-                                        temp_amb, temp_target);
+        temp_e = getExpectedTemperature(TRACE_HEATER_COOL_PERIOD / 1000.0, temp_amb, temp_target);
         temp_m = read_temp_funct();
         heaterLog.info("Heater: temp_e = %f, temp_m = %f", temp_e, temp_m);
         if (temp_m < (temp_e - TRACE_HEATER_ALLOWED_COMPARE_ERROR)) {
@@ -100,7 +102,7 @@ float TraceHeater::getTemperatureData() {
 // Calculate what the board temperature should be after the given elapsed time (seconds) and the
 // estimated time constant (seconds), ambient temperature (Celsius), and the measured initial
 // temperature (Celsius)
-float TraceHeater::getExpectedTemperature(float tau, float t, float ambientTemp, float initTemp) {
+float TraceHeater::getExpectedTemperature(float t, float ambientTemp, float initTemp) {
     return (ambientTemp - initTemp) * (1 - exp(-t / tau)) + initTemp;
 }
 

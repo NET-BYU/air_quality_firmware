@@ -182,7 +182,7 @@ SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
-TraceHeater traceHeater([]() { return sht31.readTemperature(); });
+TraceHeater traceHeater(config.data.boardTimeConstant, []() { return sht31.readTemperature(); });
 
 float readACCurrentValue() {
     float ACCurrtntValue = 0;
@@ -465,7 +465,7 @@ void loop() // Print out RTC status in loop
 
     if (handleHeaterFlag) {
         Log.info("handling heater!");
-        if (config.data.heaterEnabled) {
+        if (config.data.traceHeaterEnabled) {
             traceHeater.tick();
         }
         handleHeaterFlag = false;
@@ -730,7 +730,7 @@ void readSensors(SensorPacket *packet) {
         packet->co2 = co2;
         packet->has_co2 = true;
 
-        if (!config.data.heaterEnabled) {
+        if (!config.data.traceHeaterEnabled) {
             float temp = airSensor.getTemperature();
             packet->temperature = (int32_t)round(temp * 10);
             packet->has_temperature = true;
@@ -748,7 +748,7 @@ void readSensors(SensorPacket *packet) {
     }
 
     if (tempHumPresent) {
-        if (!config.data.heaterEnabled) {
+        if (!config.data.traceHeaterEnabled) {
             float temp = sht31.readTemperature();
             packet->temperature = (int32_t)round(temp * 10);
             packet->has_temperature = true;
@@ -763,7 +763,7 @@ void readSensors(SensorPacket *packet) {
         sht31.begin(TEMP_HUM_I2C_ADDR);
     }
 
-    if (config.data.heaterEnabled && traceHeater.hasNewTemperatureData()) {
+    if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
         packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
         packet->has_temperature = true;
     }
@@ -1142,15 +1142,15 @@ int cloudParameters(String arg) {
         return 0;
     }
 
-    if (strncmp(command, "heaterEnabled", commandLength) == 0) {
+    if (strncmp(command, "traceHeaterEnabled", commandLength) == 0) {
         if (settingValue) {
-            Log.info("Setting heaterEnabled to %ld", value);
-            config.data.heaterEnabled = value;
+            Log.info("Setting traceHeaterEnabled to %ld", value);
+            config.data.traceHeaterEnabled = value;
             config.save();
             config.print();
             return 0;
         } else {
-            return config.data.heaterEnabled;
+            return config.data.traceHeaterEnabled;
         }
     }
 
