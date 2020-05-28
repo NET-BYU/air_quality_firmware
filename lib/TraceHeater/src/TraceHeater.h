@@ -38,6 +38,11 @@ class TraceHeater {
     void begin();
 
   private:
+    float getExpectedTemperature(
+        float boardTimeConst, float elapsedTimeSec, float ambientTemp,
+        float initTemp); // Calculate what the board temperature should be after the given elapsed
+                         // time and the estimated time constant, ambient temperature, and the
+                         // measured initial temperature
     float (*read_temp_funct)(void);
     // void (*turn_on_heater_funct)();
     // void (*turn_off_heater_funct)();

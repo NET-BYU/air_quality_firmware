@@ -70,10 +70,8 @@ void TraceHeater::tick() {
         }
     case TRACE_COMPARE_CALC:
         heaterLog.info("Heater State: TRACE_COMPARE_CALC");
-        temp_e =
-            (temp_amb - temp_target) *
-                (1 - exp(-(TRACE_HEATER_COOL_PERIOD / 1000.0) / ((float)TRACE_HEATER_BOARD_TAU))) +
-            temp_target;
+        temp_e = getExpectedTemperature(TRACE_HEATER_BOARD_TAU, TRACE_HEATER_COOL_PERIOD / 1000.0,
+                                        temp_amb, temp_target);
         temp_m = read_temp_funct();
         heaterLog.info("Heater: temp_e = %f, temp_m = %f", temp_e, temp_m);
         if (temp_m < (temp_e - TRACE_HEATER_ALLOWED_COMPARE_ERROR)) {
@@ -97,6 +95,13 @@ bool TraceHeater::hasNewTemperatureData() { return has_new_data; }
 float TraceHeater::getTemperatureData() {
     has_new_data = false;
     return temperature_data;
+}
+
+// Calculate what the board temperature should be after the given elapsed time (seconds) and the
+// estimated time constant (seconds), ambient temperature (Celsius), and the measured initial
+// temperature (Celsius)
+float TraceHeater::getExpectedTemperature(float tau, float t, float ambientTemp, float initTemp) {
+    return (ambientTemp - initTemp) * (1 - exp(-t / tau)) + initTemp;
 }
 
 void TraceHeater::reset() {
