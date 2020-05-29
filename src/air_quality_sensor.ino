@@ -167,6 +167,7 @@ Logger csvLog("app.csv");
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN,
                                     {{"app", LOG_LEVEL_INFO},
                                      {"app.encode", LOG_LEVEL_INFO},
+                                     {"app.csv", LOG_LEVEL_NONE},
                                      {"FileAckTracker", LOG_LEVEL_INFO},
                                      {"MemoryAckTracker", LOG_LEVEL_TRACE},
                                      {"TraceHeater", LOG_LEVEL_TRACE}});
@@ -1211,219 +1212,72 @@ void printSystemInfo() {
 #endif // Wiring_Cellular
 }
 
+#define MAX_ATTR_LEN 20
+void csvLogToFile(bool has_attr, int32_t reading) {
+    char buffSize[MAX_ATTR_LEN];
+    if (has_attr) {
+        snprintf(buffSize, MAX_ATTR_LEN, "%ld", reading);
+        csvLog.print(buffSize);
+    }
+    csvLog.print(",");
+}
+
 void csvLogPacket(SensorPacket *packet) {
-    char buffSize[50];
-    sprintf(buffSize, "%ld", packet->timestamp);
-    csvLog.print(buffSize);
-    csvLog.print(",");
-
-    sprintf(buffSize, "%ld", packet->sequence);
-    csvLog.print(buffSize);
-    csvLog.print(",");
-
-    if (packet->has_temperature) {
-        sprintf(buffSize, "%ld", packet->temperature);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_temperature) {
-        sprintf(buffSize, "%ld", packet->humidity);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_rtc_temperature) {
-        sprintf(buffSize, "%ld", packet->rtc_temperature);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_pm1) {
-        sprintf(buffSize, "%ld", packet->pm1);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_pm2_5) {
-        sprintf(buffSize, "%ld", packet->pm2_5);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_pm4) {
-        sprintf(buffSize, "%ld", packet->pm4);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_pm10) {
-        sprintf(buffSize, "%ld", packet->pm10);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_card_present) {
-        sprintf(buffSize, "%ld", packet->card_present);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_queue_size) {
-        sprintf(buffSize, "%ld", packet->queue_size);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_co2) {
-        sprintf(buffSize, "%ld", packet->co2);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_co) {
-        sprintf(buffSize, "%ld", packet->co);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_voltage) {
-        sprintf(buffSize, "%ld", packet->voltage);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_current) {
-        sprintf(buffSize, "%ld", packet->current);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_total_energy) {
-        sprintf(buffSize, "%ld", packet->total_energy);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_power) {
-        sprintf(buffSize, "%ld", packet->power);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_apparent_power) {
-        sprintf(buffSize, "%ld", packet->apparent_power);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_reactive_power) {
-        sprintf(buffSize, "%ld", packet->reactive_power);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_power_factor) {
-        sprintf(buffSize, "%ld", packet->power_factor);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_free_memory) {
-        sprintf(buffSize, "%ld", packet->free_memory);
-        csvLog.print(buffSize);
-    }
-    csvLog.print(",");
-
-    if (packet->has_reset_reason) {
-        sprintf(buffSize, "%ld", packet->reset_reason);
-        csvLog.print(buffSize);
-    }
+    csvLogToFile(true, packet->timestamp);
+    csvLogToFile(true, packet->sequence);
+    csvLogToFile(packet->has_temperature, packet->temperature);
+    csvLogToFile(packet->has_temperature, packet->humidity);
+    csvLogToFile(packet->has_rtc_temperature, packet->rtc_temperature);
+    csvLogToFile(packet->has_pm1, packet->pm1);
+    csvLogToFile(packet->has_pm2_5, packet->pm2_5);
+    csvLogToFile(packet->has_pm4, packet->pm4);
+    csvLogToFile(packet->has_pm10, packet->pm10);
+    csvLogToFile(packet->has_card_present, (int32_t)packet->card_present);
+    csvLogToFile(packet->has_queue_size, packet->queue_size);
+    csvLogToFile(packet->has_battery_charge, packet->battery_charge);
+    csvLogToFile(packet->has_co2, packet->co2);
+    csvLogToFile(packet->has_co, packet->co);
+    csvLogToFile(packet->has_voltage, packet->voltage);
+    csvLogToFile(packet->has_current, packet->current);
+    csvLogToFile(packet->has_total_energy, packet->total_energy);
+    csvLogToFile(packet->has_power, packet->power);
+    csvLogToFile(packet->has_apparent_power, packet->apparent_power);
+    csvLogToFile(packet->has_reactive_power, packet->reactive_power);
+    csvLogToFile(packet->has_power_factor, packet->power_factor);
+    csvLogToFile(packet->has_free_memory, packet->free_memory);
+    csvLogToFile(packet->has_reset_reason, packet->reset_reason);
     csvLog.print("\n");
+}
+
+void printPacketToLog(const char *attr_name, bool has_attr, int32_t reading) {
+    if (has_attr) {
+        Log.info("\t%s: %ld", attr_name, reading);
+    }
 }
 
 void printPacket(SensorPacket *packet) {
     Log.info("Packet:");
-    Log.info("\tTimestamp: %ld", packet->timestamp);
-    Log.info("\tSequence: %ld", packet->sequence);
-
-    if (packet->has_temperature) {
-        Log.info("\tTemperature: %ld", packet->temperature);
-    }
-
-    if (packet->has_temperature) {
-        Log.info("\tHumidity: %ld", packet->humidity);
-    }
-
-    if (packet->has_rtc_temperature) {
-        Log.info("\tRTC temperature: %ld", packet->rtc_temperature);
-    }
-
-    if (packet->has_pm1) {
-        Log.info("\tPM1: %ld", packet->pm1);
-    }
-
-    if (packet->has_pm2_5) {
-        Log.info("\tPM2.5: %ld", packet->pm2_5);
-    }
-
-    if (packet->has_pm4) {
-        Log.info("\tPM4: %ld", packet->pm4);
-    }
-
-    if (packet->has_pm10) {
-        Log.info("\tPM10: %ld", packet->pm10);
-    }
-
-    if (packet->has_card_present) {
-        Log.info("\tCard present: %d", packet->card_present);
-    }
-
-    if (packet->has_queue_size) {
-        Log.info("\tQueue size: %ld", packet->queue_size);
-    }
-
-    if (packet->has_co2) {
-        Log.info("\tC02: %ld", packet->co2);
-    }
-
-    if (packet->has_co) {
-        Log.info("\tCO: %ld", packet->co);
-    }
-
-    if (packet->has_voltage) {
-        Log.info("\tVoltage: %ld", packet->voltage);
-    }
-
-    if (packet->has_current) {
-        Log.info("\tCurrent: %ld", packet->current);
-    }
-
-    if (packet->has_total_energy) {
-        Log.info("\tTotal energy: %ld", packet->total_energy);
-    }
-
-    if (packet->has_power) {
-        Log.info("\tPower: %ld", packet->power);
-    }
-
-    if (packet->has_apparent_power) {
-        Log.info("\tApparent power: %ld", packet->apparent_power);
-    }
-
-    if (packet->has_reactive_power) {
-        Log.info("\tReactive power: %ld", packet->reactive_power);
-    }
-
-    if (packet->has_power_factor) {
-        Log.info("\tPower factor: %ld", packet->power_factor);
-    }
-
-    if (packet->has_free_memory) {
-        Log.info("\tFree Memory: %ld", packet->free_memory);
-    }
-
-    if (packet->has_reset_reason) {
-        Log.info("\tReset Reason: %ld", packet->reset_reason);
-    }
+    printPacketToLog("Timestamp", true, packet->timestamp);
+    printPacketToLog("Sequence", true, packet->sequence);
+    printPacketToLog("Temperature", packet->has_temperature, packet->temperature);
+    printPacketToLog("Humidity", packet->has_temperature, packet->humidity);
+    printPacketToLog("RTC temperature", packet->has_rtc_temperature, packet->rtc_temperature);
+    printPacketToLog("PM1", packet->has_pm1, packet->pm1);
+    printPacketToLog("PM2.5", packet->has_pm2_5, packet->pm2_5);
+    printPacketToLog("PM4", packet->has_pm4, packet->pm4);
+    printPacketToLog("PM10", packet->has_pm10, packet->pm10);
+    printPacketToLog("Card present", packet->has_card_present, packet->card_present);
+    printPacketToLog("Queue size", packet->has_queue_size, packet->queue_size);
+    printPacketToLog("Battery Charge (%)", packet->has_battery_charge, packet->battery_charge);
+    printPacketToLog("CO2", packet->has_co2, packet->co2);
+    printPacketToLog("CO", packet->has_co, packet->co);
+    printPacketToLog("Voltage", packet->has_voltage, packet->voltage);
+    printPacketToLog("Current", packet->has_current, packet->current);
+    printPacketToLog("Total energy", packet->has_total_energy, packet->total_energy);
+    printPacketToLog("Power", packet->has_power, packet->power);
+    printPacketToLog("Apparent power", packet->has_apparent_power, packet->apparent_power);
+    printPacketToLog("Reactive power", packet->has_reactive_power, packet->reactive_power);
+    printPacketToLog("Power factor", packet->has_power_factor, packet->power_factor);
+    printPacketToLog("Free Memory", packet->has_free_memory, packet->free_memory);
+    printPacketToLog("Reset Reason", packet->has_reset_reason, packet->reset_reason);
 }
