@@ -1247,7 +1247,7 @@ void printPacket(SensorPacket *packet) {
     printPacketToLog("PM2.5", packet->has_pm2_5, packet->pm2_5);
     printPacketToLog("PM4", packet->has_pm4, packet->pm4);
     printPacketToLog("PM10", packet->has_pm10, packet->pm10);
-    printPacketToLog("Card present", true, packet->has_card_present);
+    printPacketToLog("Card present", packet->has_card_present, packet->card_present);
     printPacketToLog("Queue size", packet->has_queue_size, packet->queue_size);
     printPacketToLog("Battery Charge (%)", packet->has_battery_charge, packet->battery_charge);
     printPacketToLog("CO2", packet->has_co2, packet->co2);
