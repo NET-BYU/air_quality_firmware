@@ -19,6 +19,10 @@ struct config {
     // v2
     uint32_t countryVoltage;
     uint32_t heaterPowerFactor;
+
+    // v3
+    uint32_t traceHeaterEnabled;
+    uint32_t boardTimeConstant;
 };
 typedef struct config Config;
 
@@ -38,7 +42,7 @@ class PersistentConfig {
     uint32_t address;
     void load();
 
-    Config defaultConfig = {2, 60000, 10000, 10000, 0, 10, 620, 2000, 120, 990};
+    Config defaultConfig = {2, 60000, 10000, 10000, 0, 10, 620, 2000, 120, 990, 0, 1061};
 };
 
 #endif

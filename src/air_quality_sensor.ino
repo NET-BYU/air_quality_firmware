@@ -9,6 +9,7 @@
 #include "SdCardLogHandlerRK.h"
 #include "SdFat.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
+#include "TraceHeater.h"
 #include "adafruit-sht31.h"
 #include "base85.h"
 #include "jled.h"
@@ -26,26 +27,6 @@ PRODUCT_VERSION(3);
 PRODUCT_ID(9861);
 PRODUCT_VERSION(3);
 #endif
-
-// Trace Heater
-#define TRACE_HEATER_PIN D7
-#define TRACE_HEATER_ON                                                                            \
-    LOW // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
-#define TRACE_HEATER_OFF HIGH
-/*
-                -----------------------------------------
-                | offLengthSec = 0  | offLengthSec > 0  |
----------------------------------------------------------
-onLengthSec = 0 | heater disabled   | heater disabled   |
-onLengthSec > 0 | heater always on  | heater uses timer |
----------------------------------------------------------
- */
-// onLengthSec and offLengthSec can be changed with a cloud function
-// uint32_t heaterOnLengthSec = 0;    // The number of seconds the trace heater should be on
-// uint32_t heaterOffLengthSec = 0;   // The number of seconds the trace heater should be off
-uint8_t traceHeaterState = TRACE_HEATER_OFF; // Whether the trace heater is currently on or off
-uint32_t lastTraceHeaterToggle = 0; // The unix epoch timestamp of the last time the trace heater
-                                    // toggled states. 0 means it was never toggled.
 
 // Energy Sensor Stuff
 #define ENERGY_SENSOR_PRESENT_PIN D6
@@ -168,6 +149,9 @@ Timer resetTimer(
 bool updateRTCFlag = false;
 Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
 
+bool handleHeaterFlag = true;
+Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() { handleHeaterFlag = true; });
+
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
 Timer connectingTimer(60000,
@@ -184,7 +168,8 @@ SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVE
                                     {{"app", LOG_LEVEL_INFO},
                                      {"app.encode", LOG_LEVEL_INFO},
                                      {"FileAckTracker", LOG_LEVEL_INFO},
-                                     {"MemoryAckTracker", LOG_LEVEL_TRACE}});
+                                     {"MemoryAckTracker", LOG_LEVEL_TRACE},
+                                     {"TraceHeater", LOG_LEVEL_TRACE}});
 
 SdCardLogHandler<2048> csvLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_NONE,
                                      {{"app.csv", LOG_LEVEL_INFO}});
@@ -197,6 +182,8 @@ STARTUP(csvLogHandler.withDesiredFileSize(1000000UL)
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
+
+TraceHeater traceHeater(config.data.boardTimeConstant, []() { return sht31.readTemperature(); });
 
 float readACCurrentValue() {
     float ACCurrtntValue = 0;
@@ -298,9 +285,7 @@ void setup() {
         tempHumPresent = false;
     }
 
-    // Set the Trace heeater to be initially off
-    pinMode(TRACE_HEATER_PIN, OUTPUT);
-    digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_OFF);
+    traceHeater.begin();
 
     delay(1000);
 
@@ -479,7 +464,15 @@ void loop() // Print out RTC status in loop
         Log.info("Time is set to: %ld", timestamp);
     }
 
-// Battery detection and handling, for keeping 5V sensors on with 3V battery
+    if (handleHeaterFlag) {
+        Log.info("handling heater!");
+        if (config.data.traceHeaterEnabled) {
+            traceHeater.tick();
+        }
+        handleHeaterFlag = false;
+    }
+
+    // Battery detection and handling, for keeping 5V sensors on with 3V battery
 #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
     if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY) {
         if (!poweringFromBattery) {
@@ -738,9 +731,11 @@ void readSensors(SensorPacket *packet) {
         packet->co2 = co2;
         packet->has_co2 = true;
 
-        float temp = airSensor.getTemperature();
-        packet->temperature = (int32_t)round(temp * 10);
-        packet->has_temperature = true;
+        if (!config.data.traceHeaterEnabled) {
+            float temp = airSensor.getTemperature();
+            packet->temperature = (int32_t)round(temp * 10);
+            packet->has_temperature = true;
+        }
 
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
@@ -754,10 +749,11 @@ void readSensors(SensorPacket *packet) {
     }
 
     if (tempHumPresent) {
-        float temp = sht31.readTemperature();
-        packet->temperature = (int32_t)round(temp * 10);
-        packet->has_temperature = true;
-
+        if (!config.data.traceHeaterEnabled) {
+            float temp = sht31.readTemperature();
+            packet->temperature = (int32_t)round(temp * 10);
+            packet->has_temperature = true;
+        }
         float humidity = sht31.readHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
@@ -766,6 +762,11 @@ void readSensors(SensorPacket *packet) {
                  packet->humidity);
     } else {
         sht31.begin(TEMP_HUM_I2C_ADDR);
+    }
+
+    if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
+        packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
+        packet->has_temperature = true;
     }
 
 #if PLATFORM_ID == PLATFORM_BORON
@@ -1136,7 +1137,25 @@ int cloudParameters(String arg) {
         return Time.now();
     }
 
-    {
+    if (strncmp(command, "resetHeater", commandLength) == 0) {
+        Log.info("Resetting Trace Heater");
+        traceHeater.reset();
+        return 0;
+    }
+
+    if (strncmp(command, "traceHeaterEnabled", commandLength) == 0) {
+        if (settingValue) {
+            Log.info("Setting traceHeaterEnabled to %ld", value);
+            config.data.traceHeaterEnabled = value;
+            config.save();
+            config.print();
+            return 0;
+        } else {
+            return config.data.traceHeaterEnabled;
+        }
+    }
+
+    if (strncmp(command, "countryVoltage", commandLength) == 0) {
         if (settingValue) {
             Log.info("Updating countryVoltage (%ld)", value);
             config.data.countryVoltage = value;
