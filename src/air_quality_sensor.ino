@@ -1197,7 +1197,7 @@ void printSystemInfo() {
 void csvLogToFile(bool has_attr, int32_t reading) {
     char buffSize[MAX_ATTR_LEN];
     if (has_attr) {
-        sprintf(buffSize, "%ld", reading);
+        snprintf(buffSize, MAX_ATTR_LEN, "%ld", reading);
         csvLog.print(buffSize);
     }
     csvLog.print(",");
