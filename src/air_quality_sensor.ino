@@ -1213,7 +1213,7 @@ void csvLogPacket(SensorPacket *packet) {
     csvLogToFile(packet->has_pm2_5, packet->pm2_5);
     csvLogToFile(packet->has_pm4, packet->pm4);
     csvLogToFile(packet->has_pm10, packet->pm10);
-    csvLogToFile(true, (int32_t)packet->has_card_present);
+    csvLogToFile(packet->has_card_present, (int32_t)packet->card_present);
     csvLogToFile(packet->has_queue_size, packet->queue_size);
     csvLogToFile(packet->has_battery_charge, packet->battery_charge);
     csvLogToFile(packet->has_co2, packet->co2);
