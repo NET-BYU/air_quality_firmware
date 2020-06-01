@@ -170,7 +170,7 @@ SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVE
                                      {"app.csv", LOG_LEVEL_NONE},
                                      {"FileAckTracker", LOG_LEVEL_INFO},
                                      {"MemoryAckTracker", LOG_LEVEL_TRACE},
-                                     {"TraceHeater", LOG_LEVEL_TRACE}});
+                                     {"TraceHeater", LOG_LEVEL_INFO}});
 
 SdCardLogHandler<2048> csvLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_NONE,
                                      {{"app.csv", LOG_LEVEL_INFO}});
@@ -306,6 +306,7 @@ void setup() {
     uploadTimer.start();
     connectingTimer.start();
     updateRtcTimer.start();
+    traceHeaterTimer.start();
 
     if (config.data.enablePrintSystemInfo) {
         printSystemInfoTimer.start();
