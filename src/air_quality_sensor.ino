@@ -14,6 +14,7 @@
 #include "base85.h"
 #include "jled.h"
 #include "pb_encode.h"
+#include "platform.h"
 #include "sensor_packet.pb.h"
 
 #include "ArduinoJson.h"
@@ -105,7 +106,7 @@ bool newSerialData = false;
 int resetReason = RESET_REASON_NONE;
 
 // Publishing information
-particle::Future<bool> currentPublish;
+particle::Future<bool> currentPublish; // TODO: REFACTOR
 bool currentlyPublishing = false;
 
 // Flag for publishing status information
@@ -170,9 +171,9 @@ STARTUP(csvLogHandler.withDesiredFileSize(1000000UL)
             .withLogsDirName("CSV"));
 
 // Particle system stuff
-SYSTEM_THREAD(ENABLED);
-SYSTEM_MODE(SEMI_AUTOMATIC);
-STARTUP(System.enableFeature(FEATURE_RESET_INFO));
+SYSTEM_THREAD(ENABLED);                            // TODO: REFACTOR
+SYSTEM_MODE(SEMI_AUTOMATIC);                       // TODO: REFACTOR
+STARTUP(System.enableFeature(FEATURE_RESET_INFO)); // TODO: REFACTOR
 
 TraceHeater traceHeater(config.data.boardTimeConstant, []() { return sht31.readTemperature(); });
 
@@ -201,10 +202,10 @@ float readACCurrentValue() {
 
 void setup() {
     // Set up cloud functions
-    Particle.function("reset", cloudReset);
-    Particle.function("resetCo", cloudResetCoprocessor);
-    Particle.function("unack", cloudUnackMeasurement);
-    Particle.function("param", cloudParameters);
+    Particle.function("reset", cloudReset);              // TODO: REFACTOR
+    Particle.function("resetCo", cloudResetCoprocessor); // TODO: REFACTOR
+    Particle.function("unack", cloudUnackMeasurement);   // TODO: REFACTOR
+    Particle.function("param", cloudParameters);         // TODO: REFACTOR
 
     // Get reset reason to publish later
     resetReason = System.resetReason();
@@ -302,7 +303,7 @@ void setup() {
     // Print out configuration information
     config.print();
 
-    Particle.connect();
+    Particle.connect(); // TODO: REFACTOR
 }
 
 void loop() // Print out RTC status in loop
@@ -382,7 +383,7 @@ void loop() // Print out RTC status in loop
         publishingStatus = false;
     }
 
-    if (publishStatus && !currentlyPublishing && Particle.connected()) {
+    if (publishStatus && !currentlyPublishing && Particle.connected()) { // TODO: REFACTOR
         StaticJsonDocument<200> doc;
         doc["tracker"] = trackerSetup;
         doc["rtc"] = rtcPresent;
@@ -393,7 +394,7 @@ void loop() // Print out RTC status in loop
         serializeJson(doc, output, sizeof(output));
 
         Log.info("Publishing status data: %s", output);
-        currentPublish = Particle.publish("mn/s", output, 60, PRIVATE, WITH_ACK);
+        currentPublish = Particle.publish("mn/s", output, 60, PRIVATE, WITH_ACK); // TODO: REFACTOR
         currentlyPublishing = true;
         publishingStatus = true;
         cloudLed.On().Update();
@@ -409,8 +410,8 @@ void loop() // Print out RTC status in loop
 
         Log.trace("Trying to upload data... (%d, %d, %ld >= %ld (%d))", !currentlyPublishing,
                   Particle.connected(), unconfirmedCount, config.data.uploadBatchSize,
-                  unconfirmedCount >= config.data.uploadBatchSize);
-        if (!currentlyPublishing && Particle.connected() &&
+                  unconfirmedCount >= config.data.uploadBatchSize); // TODO: REFACTOR
+        if (!currentlyPublishing && Particle.connected() &&         // TODO: REFACTOR
             (unconfirmedCount >= config.data.uploadBatchSize)) {
             // TODO: Should do the ceiling of the division just to be safe
             uint32_t maxLength =
@@ -426,7 +427,8 @@ void loop() // Print out RTC status in loop
 
             Log.info("Unconfirmed count: %ld", unconfirmedCount);
             Log.info("Publishing data: %s", (char *)encodedData);
-            currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE, WITH_ACK);
+            currentPublish = Particle.publish("mn/d", (char *)encodedData, 60, PRIVATE,
+                                              WITH_ACK); // TODO: REFACTOR
             currentlyPublishing = true;
             cloudLed.On().Update();
         }
