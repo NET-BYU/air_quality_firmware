@@ -58,6 +58,7 @@ class TraceHeater {
     float temp_target = 10.0;
     uint16_t elapsed_cool_cycles = 0;
     uint32_t tau = TRACE_HEATER_DEFAULT_BOARD_TAU;
+    Logger heaterLog;
 };
 
 #endif

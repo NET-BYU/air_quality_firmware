@@ -1,9 +1,8 @@
 #include "TraceHeater.h"
 
-static Logger heaterLog("TraceHeater");
-
 TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void),
-                         uint16_t heat_pin, uint8_t on_value) {
+                         uint16_t heat_pin, uint8_t on_value)
+    : heaterLog("TraceHeater") {
     this->tau = board_time_const;
     this->read_temp_funct = read_temp_funct;
     this->heat_pin = heat_pin;
@@ -11,7 +10,8 @@ TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(voi
     this->off_value = !on_value;
 }
 
-TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void)) {
+TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void))
+    : heaterLog("TraceHeater") {
     this->tau = board_time_const;
     this->read_temp_funct = read_temp_funct;
     this->heat_pin = TRACE_HEATER_PIN;
