@@ -623,39 +623,27 @@ bool isRTCPresent() {
     return first != second;
 }
 
-void readSensors(SensorPacket *packet) {
-    uint32_t timestamp;
+void readRTC(SensorPacket *packet) {
     if (rtcPresent) {
-        Log.info("readSensors(): RTC is present");
+        Log.info("readRTC(): RTC is present");
         DateTime now = rtc.now();
-        timestamp = now.unixtime();
+        packet->timestamp = now.unixtime();
     } else {
-        Log.error("readSensors(): RTC is NOT present!");
-        timestamp = Time.now();
+        Log.error("readRTC(): RTC is NOT present!");
+        packet->timestamp = Time.now();
     }
     if (rtcSet) {
-        Log.info("readSensors(): RTC is set");
+        Log.info("readRTC(): RTC is set");
     } else {
-        Log.error("readSensors(): RTC is NOT set!");
+        Log.error("readRTC(): RTC is NOT set!");
     }
-    packet->timestamp = timestamp;
-
-    packet->sequence = sequence.get();
-
     if (rtcPresent) {
         packet->rtc_temperature = rtc.getTemperature();
         packet->has_rtc_temperature = true;
     }
+}
 
-    packet->card_present = currentTracker == &fileTracker;
-    packet->has_card_present = true;
-
-    uint32_t unconfirmedCount;
-    if (currentTracker->unconfirmedCount(&unconfirmedCount)) {
-        packet->queue_size = unconfirmedCount;
-        packet->has_queue_size = true;
-    }
-
+void readPMSensor(SensorPacket *packet) {
     if (pmSensor.dataAvailable()) {
         pmSensor.getMass(pmMeasurement);
 
@@ -677,7 +665,9 @@ void readSensors(SensorPacket *packet) {
         // There should always be data available so begin measuring again
         pmSensor.begin();
     }
+}
 
+void readAirSensor(SensorPacket *packet) {
     if (airSensor.dataAvailable()) {
         uint32_t co2 = airSensor.getCO2();
         packet->co2 = co2;
@@ -692,14 +682,16 @@ void readSensors(SensorPacket *packet) {
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
-        Log.info("readSensors(): CO2 - CO2=%ld, temp=%ld, hum=%ld", packet->co2,
+        Log.info("readAirSensor(): CO2 - CO2=%ld, temp=%ld, hum=%ld", packet->co2,
                  packet->temperature, packet->humidity);
     } else {
         Log.error("can't read CO2");
         // There should always be data available so begin measuring again
         airSensor.begin();
     }
+}
 
+void readTemHumSensor(SensorPacket *packet) {
     if (tempHumPresent) {
         if (!config.data.traceHeaterEnabled) {
             float temp = sht31.readTemperature();
@@ -710,23 +702,16 @@ void readSensors(SensorPacket *packet) {
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
 
-        Log.info("readSensors(): tempHum - temp=%ld, hum=%ld", packet->temperature,
+        Log.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld", packet->temperature,
                  packet->humidity);
     } else {
         sht31.begin(TEMP_HUM_I2C_ADDR);
     }
+}
 
-    if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
-        packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
-        packet->has_temperature = true;
-    }
-
-#if PLATFORM_ID == PLATFORM_BORON
-    Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
-#endif
-
+void readEnergySensor(SensorPacket *packet) {
     if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED) {
-        Log.info("readSensors(): Energy sensor detected.");
+        Log.info("readEnergySensor(): Energy sensor detected.");
         float acCurrentValue = readACCurrentValue(); // read AC Current Value
         float heaterPF =
             ((float)config.data.heaterPowerFactor / 1000.0f); // Puts power factor into float form
@@ -734,15 +719,65 @@ void readSensors(SensorPacket *packet) {
             acCurrentValue * config.data.countryVoltage * heaterPF; // Calculates real power
         Log.info("heaterPowerFactor: pf=%f", heaterPF);
         Log.info("countryVoltage: int voltage=%ld", config.data.countryVoltage);
-        Log.info("readSensors(): float current=%f", acCurrentValue);
+        Log.info("readEnergySensor(): float current=%f", acCurrentValue);
         packet->has_current = true;
         packet->current = (int32_t)(acCurrentValue * 1000);
-        Log.info("readSensors(): float power=%f", measuredPower);
+        Log.info("readEnergySensor(): float power=%f", measuredPower);
         packet->has_power = true;
         packet->power = (int32_t)measuredPower;
-        // Log.info("readSensors(): current=%ld", packet->current);
     }
+}
 
+void readResetReason(SensorPacket *packet) {
+    if (resetReason != RESET_REASON_NONE) {
+        packet->reset_reason = resetReason;
+        packet->has_reset_reason = true;
+
+        if (resetReason == RESET_REASON_PANIC) {
+            uint32_t resetReasondata = System.resetReasonData();
+            packet->reset_reason_data = resetReasondata;
+            packet->has_reset_reason_data = true;
+        }
+
+        // Make sure to read reset reason only once
+        resetReason = RESET_REASON_NONE;
+    }
+}
+
+void readBatteryCharge(SensorPacket *packet) {
+#if PLATFORM_ID == PLATFORM_BORON
+    if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
+        DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_UNKNOWN) {
+        Log.warn("The battery is either disconnected or in an unknown state.");
+        packet->has_battery_charge = false;
+    } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY) {
+        int32_t batteryCharge = (int32_t)roundf(System.batteryCharge());
+        Log.info("System.batteryCharge(): %ld%%", batteryCharge);
+        packet->has_battery_charge = true;
+        packet->battery_charge = batteryCharge;
+    } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) != POWER_SOURCE_BATTERY) {
+        Log.info("The sensor is plugged-in or connected via USB");
+        packet->has_battery_charge = false;
+    }
+#endif
+}
+
+void readTraceHeater(SensorPacket *packet) {
+    if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
+        packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
+        packet->has_temperature = true;
+    }
+}
+
+void readQueue(SensorPacket *packet) {
+    uint32_t unconfirmedCount;
+    if (currentTracker->unconfirmedCount(&unconfirmedCount)) {
+        packet->queue_size = unconfirmedCount;
+        packet->has_queue_size = true;
+    }
+}
+
+void readCOSensor(SensorPacket *packet) {
     if (newSerialData) {
         uint32_t sensorNum;
         float conc;
@@ -761,52 +796,41 @@ void readSensors(SensorPacket *packet) {
         if (result != EOF) {
             packet->has_co = true;
             packet->co = (uint32_t)(conc * 100);
-            Log.info("readSensors(): Reading co value of %f, transmitting %ld", conc, packet->co);
+            Log.info("readCOSensor(): Reading co value of %f, transmitting %ld", conc, packet->co);
         } else {
             Log.error("readSensors(): Could not interpret co value");
         }
         newSerialData = false;
         Serial1.write('\r'); // Ask for another measurement from the CO sensor
     }
+}
 
-    if (resetReason != RESET_REASON_NONE) {
-        packet->reset_reason = resetReason;
-        packet->has_reset_reason = true;
-
-        if (resetReason == RESET_REASON_PANIC) {
-            uint32_t resetReasondata = System.resetReasonData();
-            packet->reset_reason_data = resetReasondata;
-            packet->has_reset_reason_data = true;
-        }
-
-        // Make sure to read reset reason only once
-        resetReason = RESET_REASON_NONE;
-    }
-
-#if PLATFORM_ID == PLATFORM_BORON
-    if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
-        DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_UNKNOWN) {
-        Log.warn("The battery is either disconnected or in an unknown state."); // This accurately
-                                                                                // retrieves battery
-                                                                                // percentage
-        packet->has_battery_charge = false;
-    } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY) {
-        int32_t batteryCharge = (int32_t)roundf(System.batteryCharge());
-        Log.info("System.batteryCharge(): %ld%%",
-                 batteryCharge); // This accurately retrieves battery percentage
-        packet->has_battery_charge = true;
-        packet->battery_charge = batteryCharge;
-    } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) != POWER_SOURCE_BATTERY) {
-        Log.info("The sensor is plugged-in or connected via USB");
-        packet->has_battery_charge = false;
-    }
-#endif
-
+void readFreeMem(SensorPacket *packet) {
 #if Wiring_WiFi
     uint32_t freeMem = System.freeMemory();
     packet->free_memory = freeMem;
     packet->has_free_memory = true;
-#endif // Wiring_WiFi
+#endif
+}
+
+void readSensors(SensorPacket *packet) {
+    readRTC(packet);
+    packet->sequence = sequence.get();
+    packet->card_present = currentTracker == &fileTracker;
+    packet->has_card_present = true;
+    readQueue(packet);
+    readPMSensor(packet);
+    readAirSensor(packet);
+    readTemHumSensor(packet);
+    readEnergySensor(packet);
+    readTraceHeater(packet);
+    readResetReason(packet);
+    readCOSensor(packet);
+    readBatteryCharge(packet);
+    readFreeMem(packet);
+#if PLATFORM_ID == PLATFORM_BORON
+    Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
+#endif
 }
 
 bool packMeasurement(SensorPacket *inPacket, uint32_t inLength, uint8_t *out, uint8_t *outLength) {
