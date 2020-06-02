@@ -96,17 +96,7 @@ bool coPresent = true;
 PMIC pmic;
 #endif
 
-// Energy Meter Data
-#define ENERGY_METER_DATA_SIZE 200
-char energyMeterData[ENERGY_METER_DATA_SIZE];
-bool newEnergyMeterData = false;
-
 // Serial device
-#define SERIAL_TYPE_UNKNOWN 0
-#define SERIAL_TYPE_ENERGY 1
-#define SERIAL_TYPE_CO 2
-char serialDeviceType =
-    SERIAL_TYPE_UNKNOWN; // Assume at first that the device attached is a CO sensor
 #define SERIAL_DATA_SIZE 200
 char serialData[SERIAL_DATA_SIZE];
 bool newSerialData = false;
@@ -222,18 +212,15 @@ void setup() {
     // Debugging port
     Serial.begin(9600);
 
-    // Energy meter port
-    // Serial1.begin(115200);
-    serialDeviceType = SERIAL_TYPE_UNKNOWN; // Even though we assume we have a CO sensor attached,
-                                            // we don't know yet
+    // Setup co sensor
     Serial1.begin(9600);
     Serial1.flush();
     delay(1000);
-    Serial1.write('A');
+    Serial1.write('A'); // Set the running average so it uses 300 measurements
     delay(1000);
     Serial1.print(300);
     delay(500);
-    Serial1.write('\r');
+    Serial1.write('\r'); // Request a measurement
     delay(2500);
 
     // delay(5000);
@@ -566,40 +553,9 @@ AckTracker *getAckTrackerForReading() {
 
 void serialEvent1() {
     serialLog.info("SerialEvent1!");
-    if (serialDeviceType == SERIAL_TYPE_CO || serialDeviceType == SERIAL_TYPE_UNKNOWN) {
-        Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
-        serialLog.info("Serial Data received");
-        newSerialData = true;
-        if (serialDeviceType == SERIAL_TYPE_UNKNOWN) {
-            uint32_t sensorNum;
-            float conc;
-            float temp;
-            float rh;
-            uint32_t conc_c;
-            uint32_t temp_c;
-            uint32_t rh_c;
-            uint32_t days;
-            uint32_t hours;
-            uint32_t minutes;
-            uint32_t seconds;
-            int result = sscanf(serialData, "%lu, %f, %f, %f, %lu, %lu, %lu, %lu, %lu, %lu, %lu",
-                                &sensorNum, &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days,
-                                &hours, &minutes, &seconds);
-            if (result != EOF) {
-                serialLog.info("Serial data is from CO sensor");
-                serialDeviceType = SERIAL_TYPE_CO;
-            } else {
-                newSerialData = false;
-                serialDeviceType = SERIAL_TYPE_ENERGY;
-                Serial1.flush();
-                Serial1.begin(115200);
-            }
-        }
-    } else if (serialDeviceType == SERIAL_TYPE_ENERGY) {
-        Serial1.readBytes(energyMeterData, ENERGY_METER_DATA_SIZE);
-        serialLog.info("Energy meter data: %s\n", energyMeterData);
-        newEnergyMeterData = true;
-    }
+    Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
+    serialLog.info("Serial Data received: %s\n", serialData);
+    newSerialData = true;
 }
 
 bool connecting() {
@@ -665,12 +621,6 @@ bool isRTCPresent() {
     uint32_t second = rtc.now().unixtime();
 
     return first != second;
-}
-
-char getUARTType() {
-    // StaticJsonDocument<ENERGY_METER_DATA_SIZE> doc;
-    // DeserializationError error = deserializeJson(doc, energyMeterData);
-    return SERIAL_TYPE_UNKNOWN;
 }
 
 void readRTC(SensorPacket *packet) {
@@ -845,10 +795,6 @@ void readSensors(SensorPacket *packet) {
     readBatteryCharge(packet);
 #endif
 
-    if (serialDeviceType == SERIAL_TYPE_CO || serialDeviceType == SERIAL_TYPE_UNKNOWN) {
-        Serial1.write('\r');
-    }
-
     if (newSerialData) {
         uint32_t sensorNum;
         float conc;
@@ -872,40 +818,7 @@ void readSensors(SensorPacket *packet) {
             Log.error("readSensors(): Could not interpret co value");
         }
         newSerialData = false;
-    } else if (newEnergyMeterData) {
-        StaticJsonDocument<ENERGY_METER_DATA_SIZE> doc;
-        DeserializationError error = deserializeJson(doc, energyMeterData);
-
-        if (error) {
-            Log.warn("Unable to parse JSON...");
-            Log.warn(error.c_str());
-            // serialDeviceType = SERIAL_TYPE_CO;
-            // Serial1.flush();
-            // Serial1.begin(9600);
-            Log.info("Attempting to detect CO device");
-        } else {
-            packet->current = (float)doc["c"] * 1000;
-            packet->has_current = true;
-
-            packet->voltage = doc["v"];
-            packet->has_voltage = true;
-
-            packet->total_energy = (float)doc["t"] * 1000;
-            packet->has_total_energy = true;
-
-            packet->power = doc["p"];
-            packet->has_power = true;
-
-            packet->apparent_power = doc["a"];
-            packet->has_apparent_power = false;
-
-            packet->reactive_power = doc["r"];
-            packet->has_reactive_power = false;
-
-            packet->power_factor = (float)doc["f"] * 100;
-            packet->has_power_factor = false;
-        }
-        newEnergyMeterData = false;
+        Serial1.write('\r'); // Ask for another measurement from the CO sensor
     }
 
 #if Wiring_WiFi
@@ -967,11 +880,7 @@ void resetDevice() {
 }
 
 void resetCoprocessor() {
-    if (serialDeviceType == SERIAL_TYPE_CO) {
-        Serial1.print("R");
-    } else {
-        Serial1.printf("reset");
-    }
+    Serial1.printf("reset");
     Serial1.flush();
 }
 
@@ -1165,8 +1074,14 @@ int cloudParameters(String arg) {
 
     if (strncmp(command, "traceHeaterEnabled", commandLength) == 0) {
         if (settingValue) {
-            Log.info("Setting traceHeaterEnabled to %ld", value);
-            config.data.traceHeaterEnabled = value;
+            uint32_t enable;
+            if (value == 1) {
+                enable = 1;
+            } else {
+                enable = 0;
+            }
+            Log.info("Setting traceHeaterEnabled to %ld", enable);
+            config.data.traceHeaterEnabled = enable;
             config.save();
             config.print();
             return 0;
