@@ -793,6 +793,7 @@ void readResetReason(SensorPacket *packet) {
     }
 }
 
+#if PLATFORM_ID == PLATFORM_BORON
 void readBatteryCharge(SensorPacket *packet) {
     if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
         DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_UNKNOWN) {
@@ -808,6 +809,7 @@ void readBatteryCharge(SensorPacket *packet) {
         packet->has_battery_charge = false;
     }
 }
+#endif
 
 void readTraceHeater(SensorPacket *packet) {
     if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
@@ -816,23 +818,26 @@ void readTraceHeater(SensorPacket *packet) {
     }
 }
 
-void readSensors(SensorPacket *packet) {
-    readRTC(packet);
-    packet->sequence = sequence.get();
-    packet->card_present = currentTracker == &fileTracker;
-    packet->has_card_present = true;
-
+void readQueue(SensorPacket *packet) {
     uint32_t unconfirmedCount;
     if (currentTracker->unconfirmedCount(&unconfirmedCount)) {
         packet->queue_size = unconfirmedCount;
         packet->has_queue_size = true;
     }
+}
 
+void readSensors(SensorPacket *packet) {
+    readRTC(packet);
+    packet->sequence = sequence.get();
+    packet->card_present = currentTracker == &fileTracker;
+    packet->has_card_present = true;
+    readQueue(packet);
     readPMSensor(packet);
     readAirSensor(packet);
     readTemHumSensor(packet);
     readEnergySensor(packet);
     readTraceHeater(packet);
+    readResetReason(packet);
 
 #if PLATFORM_ID == PLATFORM_BORON
     Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
@@ -899,11 +904,8 @@ void readSensors(SensorPacket *packet) {
             packet->power_factor = (float)doc["f"] * 100;
             packet->has_power_factor = false;
         }
-
         newEnergyMeterData = false;
     }
-
-    readResetReason(packet);
 
 #if Wiring_WiFi
     uint32_t freeMem = System.freeMemory();
