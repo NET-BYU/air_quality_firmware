@@ -625,17 +625,17 @@ bool isRTCPresent() {
 
 void readRTC(SensorPacket *packet) {
     if (rtcPresent) {
-        Log.info("readSensors(): RTC is present");
+        Log.info("readRTC(): RTC is present");
         DateTime now = rtc.now();
         packet->timestamp = now.unixtime();
     } else {
-        Log.error("readSensors(): RTC is NOT present!");
+        Log.error("readRTC(): RTC is NOT present!");
         packet->timestamp = Time.now();
     }
     if (rtcSet) {
-        Log.info("readSensors(): RTC is set");
+        Log.info("readRTC(): RTC is set");
     } else {
-        Log.error("readSensors(): RTC is NOT set!");
+        Log.error("readRTC(): RTC is NOT set!");
     }
     if (rtcPresent) {
         packet->rtc_temperature = rtc.getTemperature();
@@ -682,7 +682,7 @@ void readAirSensor(SensorPacket *packet) {
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
-        Log.info("readSensors(): CO2 - CO2=%ld, temp=%ld, hum=%ld", packet->co2,
+        Log.info("readAirSensor(): CO2 - CO2=%ld, temp=%ld, hum=%ld", packet->co2,
                  packet->temperature, packet->humidity);
     } else {
         Log.error("can't read CO2");
@@ -702,7 +702,7 @@ void readTemHumSensor(SensorPacket *packet) {
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
 
-        Log.info("readSensors(): tempHum - temp=%ld, hum=%ld", packet->temperature,
+        Log.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld", packet->temperature,
                  packet->humidity);
     } else {
         sht31.begin(TEMP_HUM_I2C_ADDR);
@@ -711,7 +711,7 @@ void readTemHumSensor(SensorPacket *packet) {
 
 void readEnergySensor(SensorPacket *packet) {
     if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED) {
-        Log.info("readSensors(): Energy sensor detected.");
+        Log.info("readEnergySensor(): Energy sensor detected.");
         float acCurrentValue = readACCurrentValue(); // read AC Current Value
         float heaterPF =
             ((float)config.data.heaterPowerFactor / 1000.0f); // Puts power factor into float form
@@ -719,10 +719,10 @@ void readEnergySensor(SensorPacket *packet) {
             acCurrentValue * config.data.countryVoltage * heaterPF; // Calculates real power
         Log.info("heaterPowerFactor: pf=%f", heaterPF);
         Log.info("countryVoltage: int voltage=%ld", config.data.countryVoltage);
-        Log.info("readSensors(): float current=%f", acCurrentValue);
+        Log.info("readEnergySensor(): float current=%f", acCurrentValue);
         packet->has_current = true;
         packet->current = (int32_t)(acCurrentValue * 1000);
-        Log.info("readSensors(): float power=%f", measuredPower);
+        Log.info("readEnergySensor(): float power=%f", measuredPower);
         packet->has_power = true;
         packet->power = (int32_t)measuredPower;
     }
@@ -796,7 +796,7 @@ void readCOSensor(SensorPacket *packet) {
         if (result != EOF) {
             packet->has_co = true;
             packet->co = (uint32_t)(conc * 100);
-            Log.info("readSensors(): Reading co value of %f, transmitting %ld", conc, packet->co);
+            Log.info("readCOSensor(): Reading co value of %f, transmitting %ld", conc, packet->co);
         } else {
             Log.error("readSensors(): Could not interpret co value");
         }
