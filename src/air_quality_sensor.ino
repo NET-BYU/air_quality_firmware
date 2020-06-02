@@ -744,8 +744,8 @@ void readResetReason(SensorPacket *packet) {
     }
 }
 
-#if PLATFORM_ID == PLATFORM_BORON
 void readBatteryCharge(SensorPacket *packet) {
+#if PLATFORM_ID == PLATFORM_BORON
     if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
         DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_UNKNOWN) {
         Log.warn("The battery is either disconnected or in an unknown state.");
@@ -759,8 +759,8 @@ void readBatteryCharge(SensorPacket *packet) {
         Log.info("The sensor is plugged-in or connected via USB");
         packet->has_battery_charge = false;
     }
-}
 #endif
+}
 
 void readTraceHeater(SensorPacket *packet) {
     if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
@@ -805,13 +805,13 @@ void readCOSensor(SensorPacket *packet) {
     }
 }
 
-#if Wiring_WiFi
 void readFreeMem(SensorPacket *packet) {
+#if Wiring_WiFi
     uint32_t freeMem = System.freeMemory();
     packet->free_memory = freeMem;
     packet->has_free_memory = true;
-}
 #endif
+}
 
 void readSensors(SensorPacket *packet) {
     readRTC(packet);
@@ -826,15 +826,11 @@ void readSensors(SensorPacket *packet) {
     readTraceHeater(packet);
     readResetReason(packet);
     readCOSensor(packet);
-
+    readBatteryCharge(packet);
+    readFreeMem(packet);
 #if PLATFORM_ID == PLATFORM_BORON
     Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
-    readBatteryCharge(packet);
 #endif
-
-#if Wiring_WiFi
-    readFreeMem(packet);
-#endif // Wiring_WiFi
 }
 
 bool packMeasurement(SensorPacket *inPacket, uint32_t inLength, uint8_t *out, uint8_t *outLength) {
