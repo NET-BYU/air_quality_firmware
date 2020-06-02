@@ -777,24 +777,7 @@ void readQueue(SensorPacket *packet) {
     }
 }
 
-void readSensors(SensorPacket *packet) {
-    readRTC(packet);
-    packet->sequence = sequence.get();
-    packet->card_present = currentTracker == &fileTracker;
-    packet->has_card_present = true;
-    readQueue(packet);
-    readPMSensor(packet);
-    readAirSensor(packet);
-    readTemHumSensor(packet);
-    readEnergySensor(packet);
-    readTraceHeater(packet);
-    readResetReason(packet);
-
-#if PLATFORM_ID == PLATFORM_BORON
-    Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
-    readBatteryCharge(packet);
-#endif
-
+void readCOSensor(SensorPacket *packet) {
     if (newSerialData) {
         uint32_t sensorNum;
         float conc;
@@ -820,11 +803,37 @@ void readSensors(SensorPacket *packet) {
         newSerialData = false;
         Serial1.write('\r'); // Ask for another measurement from the CO sensor
     }
+}
 
 #if Wiring_WiFi
+void readFreeMem(SensorPacket *packet) {
     uint32_t freeMem = System.freeMemory();
     packet->free_memory = freeMem;
     packet->has_free_memory = true;
+}
+#endif
+
+void readSensors(SensorPacket *packet) {
+    readRTC(packet);
+    packet->sequence = sequence.get();
+    packet->card_present = currentTracker == &fileTracker;
+    packet->has_card_present = true;
+    readQueue(packet);
+    readPMSensor(packet);
+    readAirSensor(packet);
+    readTemHumSensor(packet);
+    readEnergySensor(packet);
+    readTraceHeater(packet);
+    readResetReason(packet);
+    readCOSensor(packet);
+
+#if PLATFORM_ID == PLATFORM_BORON
+    Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
+    readBatteryCharge(packet);
+#endif
+
+#if Wiring_WiFi
+    readFreeMem(packet);
 #endif // Wiring_WiFi
 }
 
