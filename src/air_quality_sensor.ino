@@ -132,9 +132,8 @@ Timer printSystemInfoTimer(config.data.printSysInfoMs, []() {
     printSystemInfoFlag = true;
 }); // Periodically write data usage in the logs
 
-Timer resetTimer(
-    config.data.delayBeforeReboot, resetDevice,
-    true); // Periodically resets the senspr (like once an hour...?) to avoid weird catches
+Timer resetTimer(config.data.delayBeforeReboot, resetDevice,
+                 true); // A small delay between calling reset and actually resetting
 
 bool updateRTCFlag = false;
 Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
@@ -146,6 +145,10 @@ Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() { handleHeaterFlag = true
 uint32_t connectingCounter = 0;
 Timer connectingTimer(60000,
                       checkConnecting); // Time it will try to connect before reseting the device
+
+bool coZeroDoneFlag = false;
+Timer coZeroTimer(
+    360000, []() { coZeroDoneFlag = true; }, true);
 
 #define LENGTH_HEADER_SIZE 2
 
@@ -475,6 +478,11 @@ void loop() // Print out RTC status in loop
         poweringFromBattery = false;
     }
 #endif
+
+    if (coZeroDoneFlag) {
+        Serial1.write("Z");
+        coZeroDoneFlag = false;
+    }
 
     if (connectingCounter >= MAX_RECONNECT_COUNT) {
         Log.warn("Rebooting myself because I've been connecting for too long.");
@@ -1126,6 +1134,12 @@ int cloudParameters(String arg) {
         Log.error("Non-Boron device cannot determine power source");
         return -1;
 #endif
+    }
+
+    if (strncmp(command, "zeroCO", commandLength) == 0) {
+        Serial1.write(
+            "\r"); // Write something just to ensure the device is not in Low-Power standby mode
+        coZeroTimer.start(); // Start timer for an hour, after which the device will zero
     }
 
     Log.error("No matching command: %s", argStr);
