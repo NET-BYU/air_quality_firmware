@@ -148,7 +148,7 @@ Timer connectingTimer(60000,
 
 bool coZeroDoneFlag = false;
 Timer coZeroTimer(
-    360000, []() { coZeroDoneFlag = true; }, true);
+    3600000, []() { coZeroDoneFlag = true; }, true);
 
 #define LENGTH_HEADER_SIZE 2
 
@@ -481,6 +481,7 @@ void loop() // Print out RTC status in loop
 
     if (coZeroDoneFlag) {
         Serial1.write("Z");
+        Log.info("Zero-ing the CO sensor!");
         coZeroDoneFlag = false;
     }
 
@@ -1139,7 +1140,9 @@ int cloudParameters(String arg) {
     if (strncmp(command, "zeroCO", commandLength) == 0) {
         Serial1.write(
             "\r"); // Write something just to ensure the device is not in Low-Power standby mode
+        Log.info("Starting timer for CO zero=ing");
         coZeroTimer.start(); // Start timer for an hour, after which the device will zero
+        return 0;
     }
 
     Log.error("No matching command: %s", argStr);
