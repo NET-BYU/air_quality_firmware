@@ -132,9 +132,8 @@ Timer printSystemInfoTimer(config.data.printSysInfoMs, []() {
     printSystemInfoFlag = true;
 }); // Periodically write data usage in the logs
 
-Timer resetTimer(
-    config.data.delayBeforeReboot, resetDevice,
-    true); // Periodically resets the senspr (like once an hour...?) to avoid weird catches
+Timer resetTimer(config.data.delayBeforeReboot, resetDevice,
+                 true); // A small delay between calling reset and actually resetting
 
 bool updateRTCFlag = false;
 Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
@@ -1126,6 +1125,12 @@ int cloudParameters(String arg) {
         Log.error("Non-Boron device cannot determine power source");
         return -1;
 #endif
+    }
+
+    if (strncmp(command, "zeroCO", commandLength) == 0) {
+        Serial1.write("Z");
+        Log.info("Zero-ing CO sensor");
+        return 0;
     }
 
     Log.error("No matching command: %s", argStr);
