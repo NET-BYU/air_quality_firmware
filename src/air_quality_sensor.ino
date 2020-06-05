@@ -146,10 +146,6 @@ uint32_t connectingCounter = 0;
 Timer connectingTimer(60000,
                       checkConnecting); // Time it will try to connect before reseting the device
 
-bool coZeroDoneFlag = false;
-Timer coZeroTimer(
-    3600000, []() { coZeroDoneFlag = true; }, true);
-
 #define LENGTH_HEADER_SIZE 2
 
 // Logging
@@ -478,12 +474,6 @@ void loop() // Print out RTC status in loop
         poweringFromBattery = false;
     }
 #endif
-
-    if (coZeroDoneFlag) {
-        Serial1.write("Z");
-        Log.info("Zero-ing the CO sensor!");
-        coZeroDoneFlag = false;
-    }
 
     if (connectingCounter >= MAX_RECONNECT_COUNT) {
         Log.warn("Rebooting myself because I've been connecting for too long.");
@@ -1138,10 +1128,8 @@ int cloudParameters(String arg) {
     }
 
     if (strncmp(command, "zeroCO", commandLength) == 0) {
-        Serial1.write(
-            "\r"); // Write something just to ensure the device is not in Low-Power standby mode
-        Log.info("Starting timer for CO zero=ing");
-        coZeroTimer.start(); // Start timer for an hour, after which the device will zero
+        Serial1.write("Z");
+        Log.info("Zero-ing CO sensor");
         return 0;
     }
 
