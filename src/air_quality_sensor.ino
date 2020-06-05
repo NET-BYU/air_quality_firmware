@@ -1140,7 +1140,7 @@ int cloudParameters(String arg) {
     if (strncmp(command, "zeroCO", commandLength) == 0) {
         Serial1.write(
             "\r"); // Write something just to ensure the device is not in Low-Power standby mode
-        Log.info("Starting timer for CO zero=ing");
+        Log.info("Starting timer for CO zero-ing");
         coZeroTimer.start(); // Start timer for an hour, after which the device will zero
         return 0;
     }
