@@ -168,6 +168,8 @@ STARTUP(csvLogHandler.withDesiredFileSize(1000000UL)
             .withMaxFilesToKeep(1000)
             .withLogsDirName("CSV"));
 
+STARTUP(sdLogHandler.withMaxFilesToKeep(1000));
+
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
