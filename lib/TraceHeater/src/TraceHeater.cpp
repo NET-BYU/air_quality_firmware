@@ -33,6 +33,9 @@ void TraceHeater::tick() {
         heaterLog.info("Heater State: TRACE_INIT");
         digitalWrite(heat_pin, off_value);
         temp_amb = read_temp_funct();
+        if (isinf(temp_amb)) {
+            return;
+        }
         heaterLog.info("initial temperature is %f", temp_amb);
         trace_heater_st = TRACE_AIM;
     case TRACE_AIM:
@@ -42,6 +45,12 @@ void TraceHeater::tick() {
         if (temp_target > TRACE_HEATER_SAFETY_MAX_TEMP)
             temp_target = TRACE_HEATER_SAFETY_MAX_TEMP;
         temp_m = read_temp_funct();
+        if (isinf(temp_m)) {
+            digitalWrite(heat_pin, off_value);
+            trace_heater_st = TRACE_INIT;
+            heaterLog.info("SHT31 not available! Turning off and going to INIT");
+            return;
+        }
         heaterLog.info("Heater attempting to reach target %f, current temp is %f", temp_target,
                        temp_m);
         if (temp_target > (temp_m + TRACE_HEATER_ALLOWED_AIM_ERROR)) {
@@ -74,6 +83,12 @@ void TraceHeater::tick() {
         heaterLog.info("Heater State: TRACE_COMPARE_CALC");
         temp_e = getExpectedTemperature(TRACE_HEATER_COOL_PERIOD / 1000.0, temp_amb, temp_target);
         temp_m = read_temp_funct();
+        if (isinf(temp_m)) {
+            digitalWrite(heat_pin, off_value);
+            trace_heater_st = TRACE_INIT;
+            heaterLog.info("SHT31 not available! Turning off and going to INIT");
+            return;
+        }
         heaterLog.info("Heater: temp_e = %f, temp_m = %f", temp_e, temp_m);
         if (temp_m < (temp_e - TRACE_HEATER_ALLOWED_COMPARE_ERROR)) {
             heaterLog.info("Heater: Too hot! Cooling down.");
