@@ -20,12 +20,21 @@
 
 Adafruit_SHT31::Adafruit_SHT31() {}
 
+#define SHT31_RESET_DETECTED 0x10
+#define SHT31_CLEARED_BITS 0x8C10
+
 boolean Adafruit_SHT31::begin(uint8_t i2caddr) {
     Wire.begin();
     _i2caddr = i2caddr;
     reset();
-    return (readStatus() == 0x40);
+    delay(500);
+    uint16_t status1 = readStatus();
+    writeCommand(SHT31_CLEARSTATUS);
+    delay(500);
+    uint16_t status2 = readStatus();
+    // return (readStatus() == 0x40);
     // return true;
+    return ((status1 & SHT31_RESET_DETECTED) && ((status2 & SHT31_CLEARED_BITS) == 0x0));
 }
 
 uint16_t Adafruit_SHT31::readStatus(void) {
