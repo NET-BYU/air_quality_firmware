@@ -80,7 +80,7 @@ RTC_DS3231 rtc;
 bool rtcPresent = true;
 bool rtcSet = true;
 
-#define TEMP_HUM_I2C_ADDR 0x44
+#define TEMP_HUM_I2C_ADDR 0x44 // Set to 0x45 for alternate i2c addr
 
 // Temp + Humidity Sensor
 Adafruit_SHT31 sht31; // = Adafruit_SHT31();
@@ -175,7 +175,12 @@ SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 
-TraceHeater traceHeater(config.data.boardTimeConstant, []() { return sht31.readTemperature(); });
+TraceHeater traceHeater(config.data.boardTimeConstant, []() {
+    if (tempHumPresent) {
+        return sht31.readTemperature();
+    }
+    return INFINITY;
+});
 
 float readACCurrentValue() {
     float ACCurrtntValue = 0;
@@ -268,11 +273,11 @@ void setup() {
         airSensorSetup = false;
     }
 
-    if (!sht31.begin(TEMP_HUM_I2C_ADDR)) // Set to 0x45 for alternate i2c addr
-    {
+    if (!sht31.begin(TEMP_HUM_I2C_ADDR)) {
         Serial.println("Couldn't find SHT31 (temp humidity)!");
         tempHumPresent = false;
     }
+    Serial.printf("sht31 status = %d\n", sht31.readStatus());
 
     traceHeater.begin();
 
@@ -455,8 +460,8 @@ void loop() // Print out RTC status in loop
     }
 
     if (handleHeaterFlag) {
-        Log.info("handling heater!");
         if (config.data.traceHeaterEnabled) {
+            Log.info("handling heater!");
             traceHeater.tick();
         }
         handleHeaterFlag = false;
@@ -794,12 +799,13 @@ void readCOSensor(SensorPacket *packet) {
         int result =
             sscanf(serialData, "%lu, %f, %f, %f, %lu, %lu, %lu, %lu, %lu, %lu, %lu", &sensorNum,
                    &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
-        if (result != EOF) {
+        if (result == 11) {
             packet->has_co = true;
             packet->co = (uint32_t)(conc * 100);
-            Log.info("readCOSensor(): Reading co value of %f, transmitting %ld", conc, packet->co);
+            Log.info("readCOSensor(): Result of %d, Reading co value of %f, transmitting %ld",
+                     result, conc, packet->co);
         } else {
-            Log.error("readSensors(): Could not interpret co value");
+            Log.error("readCOSensor(): Could not interpret co value");
         }
         newSerialData = false;
         Serial1.write('\r'); // Ask for another measurement from the CO sensor
