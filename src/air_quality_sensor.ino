@@ -8,6 +8,7 @@
 #include "SPS30.h"
 #include "SdCardLogHandlerRK.h"
 #include "SdFat.h"
+#include "Sensors.h"
 #include "SparkFun_SCD30_Arduino_Library.h"
 #include "TraceHeater.h"
 #include "adafruit-sht31.h"
