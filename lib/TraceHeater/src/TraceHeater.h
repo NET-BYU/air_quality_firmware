@@ -10,7 +10,7 @@
 #define TRACE_HEATER_ON                                                                            \
     LOW // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
 #define TRACE_HEATER_DEFAULT_BOARD_TAU                                                             \
-    1061 // Originally calculated to be 1592, but wasn't quite right
+    1697 // Originally calculated to be 1592, but wasn't quite right
 #define TRACE_HEATER_SAFETY_MAX_TEMP 39.0
 #define TRACE_HEATER_TIMER_PERIOD 5000 // Cal tick() every TRACE_HEATER_TIMER_PERIOD milliseconds
 #define TRACE_HEATER_COOL_PERIOD 30000 // Must be divisible by TRACE_HEATER_TIMER_PERIOD
@@ -38,6 +38,7 @@ class TraceHeater {
     float getTemperatureData();
     void reset();
     void begin();
+    float getEstimatedTemperature();
 
   private:
     float getExpectedTemperature(
@@ -46,8 +47,6 @@ class TraceHeater {
                          // time and the estimated time constant, ambient temperature, and the
                          // measured initial temperature
     float (*read_temp_funct)(void);
-    // void (*turn_on_heater_funct)();
-    // void (*turn_off_heater_funct)();
     uint16_t heat_pin = TRACE_HEATER_PIN;
     uint8_t on_value = TRACE_HEATER_ON;
     uint8_t off_value = !TRACE_HEATER_ON;
@@ -59,6 +58,8 @@ class TraceHeater {
     uint16_t elapsed_cool_cycles = 0;
     uint32_t tau = TRACE_HEATER_DEFAULT_BOARD_TAU;
     Logger heaterLog;
+    float prev_temp_m = 0.0;
+    uint16_t equal_count = 0;
 };
 
 #endif

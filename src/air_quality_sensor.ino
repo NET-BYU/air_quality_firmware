@@ -772,6 +772,9 @@ void readTraceHeater(SensorPacket *packet) {
     if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
         packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
         packet->has_temperature = true;
+    } else if (config.data.traceHeaterEnabled) {
+        packet->temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
+        packet->has_temperature = true;
     }
 }
 
@@ -1139,6 +1142,18 @@ int cloudParameters(String arg) {
         Serial1.write("Z");
         Log.info("Zero-ing CO sensor");
         return 0;
+    }
+
+    if (strncmp(command, "boardTimeConstant", commandLength) == 0) {
+        if (settingValue) {
+            Log.info("Updating board time constant");
+            config.data.boardTimeConstant = value;
+            config.save();
+            config.print();
+            return 0;
+        } else {
+            return config.data.boardTimeConstant;
+        }
     }
 
     Log.error("No matching command: %s", argStr);

@@ -42,7 +42,7 @@ class PersistentConfig {
     uint32_t address;
     void load();
 
-    Config defaultConfig = {2, 60000, 10000, 10000, 0, 10, 620, 2000, 120, 990, 0, 1061};
+    Config defaultConfig = {2, 60000, 10000, 10000, 0, 10, 620, 2000, 120, 990, 0, 1697};
 };
 
 #endif
