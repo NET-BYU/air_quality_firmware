@@ -89,6 +89,8 @@ float tempMeasurement;
 float humidityMeasurement;
 bool tempHumPresent = true;
 
+Sensors sensors;
+
 // CO Sensor
 bool coPresent = true;
 
@@ -264,6 +266,8 @@ void setup() {
         }
     }
 
+    sensors.setup();
+
     if (!pmSensor.begin()) {
         Log.error("Could not start PM sensor!");
         pmSensorSetup = false;
@@ -319,6 +323,7 @@ void loop() // Print out RTC status in loop
         sensorLed.Blink(1000, 1000).Update();
         Log.info("Reading sensors...");
         SensorPacket packet = SensorPacket_init_zero;
+        sensors.read(&packet, &config);
         readSensors(&packet);
         csvLogPacket(&packet);
         printPacket(&packet);
