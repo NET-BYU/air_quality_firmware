@@ -679,11 +679,9 @@ void readAirSensor(SensorPacket *packet) {
         packet->co2 = co2;
         packet->has_co2 = true;
 
-        if (!config.data.traceHeaterEnabled) {
-            float temp = airSensor.getTemperature();
-            packet->temperature = (int32_t)round(temp * 10);
-            packet->has_temperature = true;
-        }
+        float temp = airSensor.getTemperature();
+        packet->temperature = (int32_t)round(temp * 10);
+        packet->has_temperature = true;
 
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
@@ -699,11 +697,9 @@ void readAirSensor(SensorPacket *packet) {
 
 void readTemHumSensor(SensorPacket *packet) {
     if (tempHumPresent) {
-        if (!config.data.traceHeaterEnabled) {
-            float temp = sht31.readTemperature();
-            packet->temperature = (int32_t)round(temp * 10);
-            packet->has_temperature = true;
-        }
+        float temp = sht31.readTemperature();
+        packet->temperature = (int32_t)round(temp * 10);
+        packet->has_temperature = true;
         float humidity = sht31.readHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;
@@ -769,12 +765,13 @@ void readBatteryCharge(SensorPacket *packet) {
 }
 
 void readTraceHeater(SensorPacket *packet) {
-    if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
-        packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
-        packet->has_temperature = true;
-    } else if (config.data.traceHeaterEnabled) {
-        packet->temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
-        packet->has_temperature = true;
+    if (config.data.traceHeaterEnabled) {
+        packet->estimated_temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
+        packet->has_estimated_temperature = true;
+        if (traceHeater.hasNewTemperatureData()) {
+            packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
+            packet->has_temperature = true;
+        }
     }
 }
 

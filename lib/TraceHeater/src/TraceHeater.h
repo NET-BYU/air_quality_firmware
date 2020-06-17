@@ -55,6 +55,8 @@ class TraceHeater {
     float temperature_data = 0.0;
     float temp_amb = 0.0;
     float temp_target = 10.0;
+    float target_adjust = 0.0; // This value is subtracted from the target to give the true target.
+                               // Only used in case where board or ambient temperature is hot
     uint16_t elapsed_cool_cycles = 0;
     uint32_t tau = TRACE_HEATER_DEFAULT_BOARD_TAU;
     Logger heaterLog;

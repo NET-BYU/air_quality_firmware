@@ -39,6 +39,7 @@ void TraceHeater::tick() {
         heaterLog.info("Heater State: TRACE_INIT");
         digitalWrite(heat_pin, off_value);
         temp_amb = read_temp_funct();
+        target_adjust = 0.0;
         if (isinf(temp_amb)) {
             return;
         }
@@ -47,9 +48,14 @@ void TraceHeater::tick() {
     case TRACE_AIM:
         heaterLog.info("Heater State: TRACE_AIM");
         temp_target =
-            temp_amb + 11.0; // Aiming for 11 degrees higher often gives us about 10 degrees higher
-        if (temp_target > TRACE_HEATER_SAFETY_MAX_TEMP)
-            temp_target = TRACE_HEATER_SAFETY_MAX_TEMP;
+            temp_amb + 11.0 -
+            target_adjust; // Aiming for 11 degrees higher often gives us about 10 degrees higher
+        if (temp_target > TRACE_HEATER_SAFETY_MAX_TEMP) {
+            target_adjust =
+                (temp_target -
+                 TRACE_HEATER_SAFETY_MAX_TEMP); // temp_target = TRACE_HEATER_SAFETY_MAX_TEMP;
+            temp_target = temp_amb + 11.0 - target_adjust; // Recalculate
+        }
         if (isinf(temp_m)) {
             digitalWrite(heat_pin, off_value);
             trace_heater_st = TRACE_INIT;
@@ -65,7 +71,7 @@ void TraceHeater::tick() {
             if ((prev_temp_m < temp_m + TRACE_HEATER_ALLOWED_COMPARE_ERROR) &&
                 (prev_temp_m > temp_m - TRACE_HEATER_ALLOWED_COMPARE_ERROR)) {
                 if (equal_count >= 5) {
-                    temp_target -= 1.0;
+                    target_adjust += TRACE_HEATER_DELTA;
                 }
                 equal_count++;
             } else {
@@ -108,12 +114,19 @@ void TraceHeater::tick() {
         if (temp_m < (temp_e - TRACE_HEATER_ALLOWED_COMPARE_ERROR)) {
             heaterLog.info("Heater: Too hot! Cooling down.");
             temp_amb -= TRACE_HEATER_DELTA;
+            if (target_adjust >=
+                TRACE_HEATER_DELTA) { // If we were too hot before but are cooling down
+                target_adjust -= TRACE_HEATER_DELTA; // Slowly get rid of the adjustment, because we
+                                                     // won't need it as much anymore
+            } else {
+                target_adjust = 0.0;
+            }
         } else if (temp_m > (temp_e + TRACE_HEATER_ALLOWED_COMPARE_ERROR)) {
             heaterLog.info("Heater: Too cold! Heating up.");
             temp_amb += TRACE_HEATER_DELTA;
         } else {
             heaterLog.info("Heater: Just right! Temperature is 10 degrees above ambient.");
-            temp_amb = temp_m - 10.0;
+            temp_amb = temp_m - 10.0 + target_adjust;
             has_new_data = true;
             temperature_data = temp_amb;
         }
