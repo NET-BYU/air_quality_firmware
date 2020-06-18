@@ -5,13 +5,13 @@
 #include "PersistentConfig.h"
 #include "PersistentCounter.h"
 #include "RTClibrary.h"
-#include "SPS30.h"
+#include "SPS30.h" // DONE IN SENSORS
 #include "SdCardLogHandlerRK.h"
 #include "SdFat.h"
 #include "Sensors.h"
-#include "SparkFun_SCD30_Arduino_Library.h"
-#include "TraceHeater.h"
-#include "adafruit-sht31.h"
+#include "SparkFun_SCD30_Arduino_Library.h" // DONE IN SENSORS
+#include "TraceHeater.h"                    // DONE IN SENSORS
+#include "adafruit-sht31.h"                 // DONE IN SENSORS
 #include "base85.h"
 #include "jled.h"
 #include "pb_encode.h"
@@ -635,6 +635,7 @@ bool isRTCPresent() {
     return first != second;
 }
 
+// DONE IN SENSORS
 void readRTC(SensorPacket *packet) {
     if (rtcPresent) {
         Log.info("readRTC(): RTC is present");
@@ -655,6 +656,7 @@ void readRTC(SensorPacket *packet) {
     }
 }
 
+// DONE IN SENSORS
 void readPMSensor(SensorPacket *packet) {
     if (pmSensor.dataAvailable()) {
         pmSensor.getMass(pmMeasurement);
@@ -679,6 +681,7 @@ void readPMSensor(SensorPacket *packet) {
     }
 }
 
+// DONE IN SENSORS
 void readAirSensor(SensorPacket *packet) {
     if (airSensor.dataAvailable()) {
         uint32_t co2 = airSensor.getCO2();
@@ -703,6 +706,7 @@ void readAirSensor(SensorPacket *packet) {
     }
 }
 
+// DONE IN SENSORS
 void readTemHumSensor(SensorPacket *packet) {
     if (tempHumPresent) {
         if (!config.data.traceHeaterEnabled) {
@@ -740,6 +744,7 @@ void readEnergySensor(SensorPacket *packet) {
     }
 }
 
+// IS THIS PARTICLE SPECIFIC CODE?
 void readResetReason(SensorPacket *packet) {
     if (resetReason != RESET_REASON_NONE) {
         packet->reset_reason = resetReason;
@@ -756,6 +761,7 @@ void readResetReason(SensorPacket *packet) {
     }
 }
 
+// PARTICLE SPECIFIC CODE
 void readBatteryCharge(SensorPacket *packet) {
 #if PLATFORM_ID == PLATFORM_BORON
     if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
@@ -774,6 +780,7 @@ void readBatteryCharge(SensorPacket *packet) {
 #endif
 }
 
+// DONE IN SENSORS
 void readTraceHeater(SensorPacket *packet) {
     if (config.data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
         packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
@@ -818,6 +825,7 @@ void readCOSensor(SensorPacket *packet) {
     }
 }
 
+// PARTICLE SPECIFIC
 void readFreeMem(SensorPacket *packet) {
 #if Wiring_WiFi
     uint32_t freeMem = System.freeMemory();
@@ -827,20 +835,20 @@ void readFreeMem(SensorPacket *packet) {
 }
 
 void readSensors(SensorPacket *packet) {
-    readRTC(packet);
+    readRTC(packet); // DONE IN SENSORS
     packet->sequence = sequence.get();
     packet->card_present = currentTracker == &fileTracker;
     packet->has_card_present = true;
     readQueue(packet);
-    readPMSensor(packet);
-    readAirSensor(packet);
-    readTemHumSensor(packet);
+    readPMSensor(packet);     // DONE IN SENSORS
+    readAirSensor(packet);    // DONE IN SENSORS
+    readTemHumSensor(packet); // DONE IN SENSORS
     readEnergySensor(packet);
-    readTraceHeater(packet);
+    readTraceHeater(packet); // PENDING
     readResetReason(packet);
     readCOSensor(packet);
-    readBatteryCharge(packet);
-    readFreeMem(packet);
+    readBatteryCharge(packet); // PARTICLE SPECIFIC
+    readFreeMem(packet);       // PARTICLE SPECIFIC
 #if PLATFORM_ID == PLATFORM_BORON
     Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
 #endif

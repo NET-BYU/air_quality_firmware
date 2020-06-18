@@ -61,3 +61,48 @@ void Sensors::readAirSensor(SensorPacket *packet, PersistentConfig *config) {
         airSensor.begin();
     }
 }
+
+void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
+    if (tempHumPresent) {
+        if (!config->data.traceHeaterEnabled) {
+            float temp = sht31.readTemperature();
+            packet->temperature = (int32_t)round(temp * 10);
+            packet->has_temperature = true;
+        }
+        float humidity = sht31.readHumidity();
+        packet->humidity = (uint32_t)round(humidity * 10);
+        packet->has_humidity = true;
+
+        Log.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld", packet->temperature,
+                 packet->humidity);
+    } else {
+        sht31.begin(TEMP_HUM_I2C_ADDR);
+    }
+}
+
+// void Sensors::readTraceHeater(SensorPacket *packet, PersistentConfig *config) {
+//     if (config->data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
+//         packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
+//         packet->has_temperature = true;
+//     }
+// }
+
+void Sensors::readRTC(SensorPacket *packet, PersistentConfig *config) {
+    if (rtcPresent) {
+        Log.info("readRTC(): RTC is present");
+        DateTime now = rtc.now();
+        packet->timestamp = now.unixtime();
+    } else {
+        Log.error("readRTC(): RTC is NOT present!");
+        packet->timestamp = Time.now();
+    }
+    if (rtcSet) {
+        Log.info("readRTC(): RTC is set");
+    } else {
+        Log.error("readRTC(): RTC is NOT set!");
+    }
+    if (rtcPresent) {
+        packet->rtc_temperature = rtc.getTemperature();
+        packet->has_rtc_temperature = true;
+    }
+}
