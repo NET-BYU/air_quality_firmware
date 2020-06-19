@@ -13,16 +13,33 @@
 
 class Sensors {
   public:
+    Sensors(PersistentConfig *config);
     void setup();
 
     void read(SensorPacket *packet, PersistentConfig *config);
 
   private:
+    // Auxiliary functs for setup/read process
+    bool isRTCPresent();
+
+    // Setup for individual sensors
+    void setupRTC();
+    void setupPM();
+    void setupAir();
+    void setupTempHum();
+    void setupResetReason();
+
+    // Read for individual sensors
+    void readRTC(SensorPacket *packet, PersistentConfig *config);
     void readPMSensor(SensorPacket *packet, PersistentConfig *config);
     void readAirSensor(SensorPacket *packet, PersistentConfig *config);
     void readTemHumSensor(SensorPacket *packet, PersistentConfig *config);
+    void readCOSensor(SensorPacket *packet, PersistentConfig *config);
+    void readTraceHeater(SensorPacket *packet, PersistentConfig *config);
+    void readResetReason(SensorPacket *packet, PersistentConfig *config);
 
-    void readRTC(SensorPacket *packet, PersistentConfig *config);
+    // Setters
+    void setNewSerialData(bool newSerialData) { this->newSerialData = newSerialData; };
 
     // PM Sensor
     SPS30 pmSensor;
@@ -33,22 +50,30 @@ class Sensors {
     SCD30 airSensor;
     bool airSensorSetup = true;
 
-    Adafruit_SHT31 sht31; // = Adafruit_SHT31();
+    static Adafruit_SHT31 sht31; // = Adafruit_SHT31();
     float tempMeasurement;
     float humidityMeasurement;
-    bool tempHumPresent = true;
+    static bool tempHumPresent; // = true;
 
     // RTC
     RTC_DS3231 rtc;
     bool rtcPresent = true;
     bool rtcSet = true;
 
-    // TraceHeater traceHeater(config.data.boardTimeConstant, []() {
-    //     if (tempHumPresent) {
-    //         return sht31.readTemperature();
-    //     }
-    //     return INFINITY;
-    // });
+    uint32_t timeConstant;
+    TraceHeater traceHeater;
+
+    // Serial device
+#define SERIAL_DATA_SIZE 200
+    char serialData[SERIAL_DATA_SIZE];
+    bool newSerialData = false;
+
+    // Global variables to keep track of state
+    int resetReason = RESET_REASON_NONE;
+
+#ifdef PLATFORM_ID
+    Logger sensorLog;
+#endif
 };
 
 #endif

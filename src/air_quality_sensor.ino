@@ -89,8 +89,6 @@ float tempMeasurement;
 float humidityMeasurement;
 bool tempHumPresent = true;
 
-Sensors sensors;
-
 // CO Sensor
 bool coPresent = true;
 
@@ -158,6 +156,7 @@ Logger csvLog("app.csv");
 
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN,
                                     {{"app", LOG_LEVEL_INFO},
+                                     {"app.Sensor", LOG_LEVEL_INFO},
                                      {"app.encode", LOG_LEVEL_INFO},
                                      {"app.csv", LOG_LEVEL_NONE},
                                      {"FileAckTracker", LOG_LEVEL_INFO},
@@ -216,7 +215,7 @@ void setup() {
     Particle.function("param", cloudParameters);
 
     // Get reset reason to publish later
-    resetReason = System.resetReason();
+    resetReason = System.resetReason(); // DONE IN SENSORS
 
     // Debugging port
     Serial.begin(9600);
@@ -252,6 +251,7 @@ void setup() {
         currentTracker = &fileTracker;
     }
 
+    // DONE IN SENSORS
     // Make sure RTC is really working
     if (!rtc.begin() || !isRTCPresent()) {
         Log.error("Could not start RTC!");
@@ -266,25 +266,26 @@ void setup() {
         }
     }
 
-    sensors.setup();
-
+    // DONE IN SENSORS
     if (!pmSensor.begin()) {
         Log.error("Could not start PM sensor!");
         pmSensorSetup = false;
     }
 
+    // DONE IN SENSORS
     if (!airSensor.begin()) {
         Log.error("Could not start CO2 sensor!");
         airSensorSetup = false;
     }
 
+    // DONE IN SENSORS
     if (!sht31.begin(TEMP_HUM_I2C_ADDR)) {
         Serial.println("Couldn't find SHT31 (temp humidity)!");
         tempHumPresent = false;
     }
     Serial.printf("sht31 status = %d\n", sht31.readStatus());
 
-    traceHeater.begin();
+    traceHeater.begin(); // Issue #29
 
     delay(1000);
 
@@ -323,7 +324,6 @@ void loop() // Print out RTC status in loop
         sensorLed.Blink(1000, 1000).Update();
         Log.info("Reading sensors...");
         SensorPacket packet = SensorPacket_init_zero;
-        sensors.read(&packet, &config);
         readSensors(&packet);
         csvLogPacket(&packet);
         printPacket(&packet);
@@ -627,6 +627,7 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
     Log.info("Length of data: %ld", *length);
 }
 
+// DONE IN SENSORS
 bool isRTCPresent() {
     uint32_t first = rtc.now().unixtime();
     delay(1000);
@@ -745,7 +746,9 @@ void readEnergySensor(SensorPacket *packet) {
 }
 
 // IS THIS PARTICLE SPECIFIC CODE?
+// DONE IN SENSORS
 void readResetReason(SensorPacket *packet) {
+#ifdef PLATFORM_ID
     if (resetReason != RESET_REASON_NONE) {
         packet->reset_reason = resetReason;
         packet->has_reset_reason = true;
@@ -759,6 +762,7 @@ void readResetReason(SensorPacket *packet) {
         // Make sure to read reset reason only once
         resetReason = RESET_REASON_NONE;
     }
+#endif
 }
 
 // PARTICLE SPECIFIC CODE
@@ -796,6 +800,7 @@ void readQueue(SensorPacket *packet) {
     }
 }
 
+// DONE IN SENSORS
 void readCOSensor(SensorPacket *packet) {
     if (newSerialData) {
         uint32_t sensorNum;
@@ -844,9 +849,9 @@ void readSensors(SensorPacket *packet) {
     readAirSensor(packet);    // DONE IN SENSORS
     readTemHumSensor(packet); // DONE IN SENSORS
     readEnergySensor(packet);
-    readTraceHeater(packet); // PENDING
-    readResetReason(packet);
-    readCOSensor(packet);
+    readTraceHeater(packet);   // DONE IN SENSORS
+    readResetReason(packet);   // DONE IN SENSORS
+    readCOSensor(packet);      // DONE IN SENSORS
     readBatteryCharge(packet); // PARTICLE SPECIFIC
     readFreeMem(packet);       // PARTICLE SPECIFIC
 #if PLATFORM_ID == PLATFORM_BORON
