@@ -14,9 +14,12 @@ Sensors::Sensors(PersistentConfig *config)
 
 void Sensors::setup() {
     setupResetReason();
+    setupRTC();
     setupPM();
     setupAir();
     setupTempHum();
+    setupCOSensor();
+    setupEnergySensor();
     traceHeater.begin();
 }
 
@@ -26,6 +29,36 @@ bool Sensors::isRTCPresent() {
     uint32_t second = rtc.now().unixtime();
 
     return first != second;
+}
+
+float Sensors::readACCurrentValue() {
+    float ACCurrtntValue = 0;
+    int32_t peakVoltage = 0;
+    float voltageVirtualValue = 0; // Vrms
+    for (int i = 0; i < 1000; i++) {
+        peakVoltage += analogRead(AC_PIN); // read peak voltage
+        delay(1);
+    }
+    peakVoltage = peakVoltage / 1000;
+    Serial.printf("ADC:%x\t\t", peakVoltage);
+    voltageVirtualValue =
+        peakVoltage * 0.707; // change the peak voltage to the Virtual Value of voltage
+
+    /*The circuit is amplified by 2 times, so it is divided by 2.*/
+    voltageVirtualValue = (voltageVirtualValue / 4096 * VREF) / 2;
+
+    Log.info("voltageVirtualValue=%f", voltageVirtualValue);
+
+    ACCurrtntValue = voltageVirtualValue * ACTectionRange;
+
+    return ACCurrtntValue;
+}
+
+void Sensors::serialEvent1() {
+    sensorLog.info("SerialEvent1!");
+    Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
+    sensorLog.info("Serial Data received: %s\n", serialData);
+    newSerialData = true;
 }
 
 void Sensors::setupRTC() {
@@ -74,12 +107,40 @@ void Sensors::setupResetReason() {
 #endif
 }
 
-void Sensors::read(SensorPacket *packet, PersistentConfig *config) {
-    readPMSensor(packet, config);
-    readAirSensor(packet, config);
+void Sensors::setupCOSensor() {
+    // Setup co sensor
+    Serial1.begin(9600);
+    Serial1.flush();
+    delay(1000);
+    Serial1.write('A'); // Set the running average so it uses 300 measurements
+    delay(1000);
+    Serial1.print(300);
+    delay(500);
+    Serial1.write('\r'); // Request a measurement
+    delay(2500);
 }
 
-void Sensors::readPMSensor(SensorPacket *packet, PersistentConfig *config) {
+void Sensors::setupEnergySensor() {
+    pinMode(ENERGY_SENSOR_PRESENT_PIN, INPUT_PULLUP);
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED) {
+        Log.info("Energy sensor present!");
+    }
+}
+
+void Sensors::read(SensorPacket *packet, PersistentConfig *config) {
+    readRTC(packet);
+    readPMSensor(packet);
+    readAirSensor(packet, config);
+    readTemHumSensor(packet, config);
+    readTraceHeater(packet, config);
+    readCOSensor(packet);
+    readResetReason(packet);
+    readBatteryCharge(packet);
+    readFreeMem(packet);
+    readEnergySensor(packet, config);
+}
+
+void Sensors::readPMSensor(SensorPacket *packet) {
     if (pmSensor.dataAvailable()) {
         pmSensor.getMass(pmMeasurement);
 
@@ -152,7 +213,7 @@ void Sensors::readTraceHeater(SensorPacket *packet, PersistentConfig *config) {
     }
 }
 
-void Sensors::readRTC(SensorPacket *packet, PersistentConfig *config) {
+void Sensors::readRTC(SensorPacket *packet) {
     if (rtcPresent) {
         sensorLog.info("readRTC(): RTC is present");
         DateTime now = rtc.now();
@@ -172,7 +233,7 @@ void Sensors::readRTC(SensorPacket *packet, PersistentConfig *config) {
     }
 }
 
-void Sensors::readCOSensor(SensorPacket *packet, PersistentConfig *config) {
+void Sensors::readCOSensor(SensorPacket *packet) {
     if (newSerialData) {
         uint32_t sensorNum;
         float conc;
@@ -201,7 +262,7 @@ void Sensors::readCOSensor(SensorPacket *packet, PersistentConfig *config) {
     }
 }
 
-void Sensors::readResetReason(SensorPacket *packet, PersistentConfig *config) {
+void Sensors::readResetReason(SensorPacket *packet) {
 #ifdef PLATFORM_ID
     if (resetReason != RESET_REASON_NONE) {
         packet->reset_reason = resetReason;
@@ -217,4 +278,53 @@ void Sensors::readResetReason(SensorPacket *packet, PersistentConfig *config) {
         resetReason = RESET_REASON_NONE;
     }
 #endif
+}
+
+void Sensors::readBatteryCharge(SensorPacket *packet) {
+#ifdef PLATFORM_ID
+#if PLATFORM_ID == PLATFORM_BORON
+    if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
+        DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_UNKNOWN) {
+        Log.warn("The battery is either disconnected or in an unknown state.");
+        packet->has_battery_charge = false;
+    } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY) {
+        int32_t batteryCharge = (int32_t)roundf(System.batteryCharge());
+        Log.info("System.batteryCharge(): %ld%%", batteryCharge);
+        packet->has_battery_charge = true;
+        packet->battery_charge = batteryCharge;
+    } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) != POWER_SOURCE_BATTERY) {
+        Log.info("The sensor is plugged-in or connected via USB");
+        packet->has_battery_charge = false;
+    }
+#endif
+#endif
+}
+
+void Sensors::readFreeMem(SensorPacket *packet) {
+#ifdef PLATFORM_ID
+#if Wiring_WiFi
+    uint32_t freeMem = System.freeMemory();
+    packet->free_memory = freeMem;
+    packet->has_free_memory = true;
+#endif
+#endif
+}
+
+void Sensors::readEnergySensor(SensorPacket *packet, PersistentConfig *config) {
+    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED) {
+        Log.info("readEnergySensor(): Energy sensor detected.");
+        float acCurrentValue = readACCurrentValue(); // read AC Current Value
+        float heaterPF =
+            ((float)config->data.heaterPowerFactor / 1000.0f); // Puts power factor into float form
+        float measuredPower =
+            acCurrentValue * config->data.countryVoltage * heaterPF; // Calculates real power
+        Log.info("heaterPowerFactor: pf=%f", heaterPF);
+        Log.info("countryVoltage: int voltage=%ld", config->data.countryVoltage);
+        Log.info("readEnergySensor(): float current=%f", acCurrentValue);
+        packet->has_current = true;
+        packet->current = (int32_t)(acCurrentValue * 1000);
+        Log.info("readEnergySensor(): float power=%f", measuredPower);
+        packet->has_power = true;
+        packet->power = (int32_t)measuredPower;
+    }
 }
