@@ -1,18 +1,12 @@
 #include "Sensors.h"
 
-Sensors::Sensors(PersistentConfig *config)
-    : traceHeater(config->data.boardTimeConstant, []() {
-          if (tempHumPresent) {
-              return sht31.readTemperature();
-          }
-          return INFINITY;
-      }) {
+Sensors::Sensors() {
 #ifdef PLATFORM_ID
     sensorLog("app.Sensors");
 #endif
 }
 
-void Sensors::setup() {
+void Sensors::setup(PersistentConfig *config) {
     setupResetReason();
     setupRTC();
     setupPM();
@@ -125,6 +119,16 @@ void Sensors::setupEnergySensor() {
     if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED) {
         Log.info("Energy sensor present!");
     }
+}
+
+void Sensors::setupTraceHeater(PersistentConfig *config) {
+    traceHeater.setTimeConst(config->data.boardTimeConstant);
+    traceHeater.setTempFunct([]() {
+        if (getInstance()->getTempHumPresent()) {
+            return getInstance()->getSHT31()->readTemperature();
+        }
+        return INFINITY;
+    });
 }
 
 void Sensors::read(SensorPacket *packet, PersistentConfig *config) {

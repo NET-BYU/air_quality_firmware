@@ -1,5 +1,13 @@
 #include "TraceHeater.h"
 
+TraceHeater::TraceHeater() : heaterLog("TraceHeater") {
+    this->tau = TRACE_HEATER_DEFAULT_BOARD_TAU;
+    this->read_temp_funct = NULL;
+    this->heat_pin = TRACE_HEATER_PIN;
+    this->on_value = TRACE_HEATER_ON;
+    this->off_value = !TRACE_HEATER_ON;
+}
+
 TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void),
                          uint16_t heat_pin, uint8_t on_value)
     : heaterLog("TraceHeater") {
@@ -28,6 +36,9 @@ void TraceHeater::begin() {
 void TraceHeater::tick() {
     float temp_m = 0.0;
     float temp_e = 0.0;
+    if (read_temp_funct == NULL) {
+        return;
+    }
     switch (trace_heater_st) {
     case TRACE_INIT:
         heaterLog.info("Heater State: TRACE_INIT");

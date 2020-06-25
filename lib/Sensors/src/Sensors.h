@@ -12,10 +12,18 @@
 #define TEMP_HUM_I2C_ADDR 0x44 // Set to 0x45 for alternate i2c addr
 
 class Sensors {
-  public:
-    Sensors(PersistentConfig *config);
 
-    void setup();
+    static Sensors *instance;
+
+  public:
+    static Sensors *getInstance() {
+        if (!instance) {
+            instance = new Sensors;
+        }
+        return instance;
+    }
+
+    void setup(PersistentConfig *config);
     void read(SensorPacket *packet, PersistentConfig *config);
 
     // Getters
@@ -25,6 +33,9 @@ class Sensors {
     bool getAirSensorSetup() { return airSensorSetup; };
 
     bool isRTCPresent();
+
+    bool getTempHumPresent() { return tempHumPresent; };
+    Adafruit_SHT31 *getSHT31() { return &sht31; };
 
     // Setters
     void setRTCSet(bool isSetup) { rtcSet = isSetup; };
@@ -39,6 +50,8 @@ class Sensors {
     RTC_DS3231 rtc;
 
   private:
+    Sensors();
+
     // Auxiliary functs for setup/read process
     float readACCurrentValue();
     void serialEvent1();
@@ -51,6 +64,7 @@ class Sensors {
     void setupResetReason();
     void setupCOSensor();
     void setupEnergySensor();
+    void setupTraceHeater(PersistentConfig *config);
 
     // Read for individual sensors
     void readRTC(SensorPacket *packet);
@@ -77,10 +91,10 @@ class Sensors {
     bool rtcPresent = true;
     bool rtcSet = true;
 
-    static Adafruit_SHT31 sht31; // = Adafruit_SHT31();
+    Adafruit_SHT31 sht31; // = Adafruit_SHT31();
     float tempMeasurement;
     float humidityMeasurement;
-    static bool tempHumPresent; // = true;
+    bool tempHumPresent; // = true;
 
     // Serial device
 #define SERIAL_DATA_SIZE 200

@@ -128,7 +128,8 @@ STARTUP(csvLogHandler.withDesiredFileSize(1000000UL)
 STARTUP(sdLogHandler.withMaxFilesToKeep(1000));
 
 // Sensors
-Sensors allSensors(&config);
+Sensors *Sensors::instance = 0;
+Sensors *allSensors = allSensors->getInstance();
 
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
@@ -142,7 +143,7 @@ void setup() {
     Particle.function("unack", cloudUnackMeasurement);
     Particle.function("param", cloudParameters);
 
-    allSensors.setup();
+    allSensors->setup(&config);
 
     // Debugging port
     Serial.begin(9600);
@@ -270,9 +271,9 @@ void loop() // Print out RTC status in loop
     if (publishStatus && !currentlyPublishing && Particle.connected()) {
         StaticJsonDocument<200> doc;
         doc["tracker"] = trackerSetup;
-        doc["rtc"] = allSensors.getRTCPresent();
-        doc["pm"] = allSensors.getPmSensorSetup();
-        doc["air"] = allSensors.getAirSensorSetup();
+        doc["rtc"] = allSensors->getRTCPresent();
+        doc["pm"] = allSensors->getPmSensorSetup();
+        doc["air"] = allSensors->getAirSensorSetup();
 
         char output[200];
         serializeJson(doc, output, sizeof(output));
@@ -320,21 +321,21 @@ void loop() // Print out RTC status in loop
     }
 
     if (updateRTCFlag) {
-        allSensors.setRTCPresent(allSensors.isRTCPresent());
-        allSensors.setRTCSet(false); // Allow RTC to sync with time from cloud
+        allSensors->setRTCPresent(allSensors->isRTCPresent());
+        allSensors->setRTCSet(false); // Allow RTC to sync with time from cloud
         updateRTCFlag = false;
     }
 
     // Update RTC if needed
-    if (allSensors.getRTCPresent() && !allSensors.getRTCSet() && Particle.connected() &&
+    if (allSensors->getRTCPresent() && !allSensors->getRTCSet() && Particle.connected() &&
         Time.isValid()) {
         Log.info("Setting clock...");
-        allSensors.rtc.adjust(DateTime(Time.now()));
-        allSensors.setRTCSet(true);
+        allSensors->rtc.adjust(DateTime(Time.now()));
+        allSensors->setRTCSet(true);
 
         delay(500);
 
-        DateTime now = allSensors.rtc.now();
+        DateTime now = allSensors->rtc.now();
         uint32_t timestamp = now.unixtime();
         Log.info("Time is set to: %ld", timestamp);
     }
@@ -342,7 +343,7 @@ void loop() // Print out RTC status in loop
     if (handleHeaterFlag) {
         if (config.data.traceHeaterEnabled) {
             Log.info("handling heater!");
-            allSensors.traceHeater.tick();
+            allSensors->traceHeater.tick();
         }
         handleHeaterFlag = false;
     }
@@ -503,7 +504,7 @@ void readQueue(SensorPacket *packet) {
 }
 
 void readSensors(SensorPacket *packet) {
-    allSensors.read(packet, &config);
+    allSensors->read(packet, &config);
     packet->sequence = sequence.get();
     packet->card_present = currentTracker == &fileTracker;
     packet->has_card_present = true;
@@ -719,7 +720,7 @@ int cloudParameters(String arg) {
 
     if (strncmp(command, "scd30SetAltitude", commandLength) == 0) {
         Log.info("Setting altitude on SCD30");
-        allSensors.airSensor.setAltitudeCompensation(value);
+        allSensors->airSensor.setAltitudeCompensation(value);
         return 0;
     }
 
@@ -728,7 +729,7 @@ int cloudParameters(String arg) {
         // Equivilant to airSensor.SetTemperatureOffset except that that method requires a float.
         // Rather than casting to a float and dividing by 100, just for that function to multiply
         // by 100 and cast back into a uint_16, I am calling the underlying method directly.
-        allSensors.airSensor.sendCommand(COMMAND_SET_TEMPERATURE_OFFSET, value);
+        allSensors->airSensor.sendCommand(COMMAND_SET_TEMPERATURE_OFFSET, value);
         return 0;
     }
 
@@ -739,12 +740,12 @@ int cloudParameters(String arg) {
 
     if (strncmp(command, "resetRTC", commandLength) == 0) {
         Log.info("Resetting RTC");
-        allSensors.setRTCSet(false);
+        allSensors->setRTCSet(false);
         return 0;
     }
 
     if (strncmp(command, "rtc", commandLength) == 0) {
-        return allSensors.rtc.now().unixtime();
+        return allSensors->rtc.now().unixtime();
     }
 
     if (strncmp(command, "particleTime", commandLength) == 0) {
@@ -753,7 +754,7 @@ int cloudParameters(String arg) {
 
     if (strncmp(command, "resetHeater", commandLength) == 0) {
         Log.info("Resetting Trace Heater");
-        allSensors.traceHeater.reset();
+        allSensors->traceHeater.reset();
         return 0;
     }
 
