@@ -680,8 +680,10 @@ void readAirSensor(SensorPacket *packet) {
         packet->has_co2 = true;
 
         float temp = airSensor.getTemperature();
-        packet->temperature = (int32_t)round(temp * 10);
-        packet->has_temperature = true;
+        if (!config.data.traceHeaterEnabled) {
+            packet->temperature = (int32_t)round(temp * 10);
+            packet->has_temperature = true;
+        }
 
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
@@ -698,8 +700,10 @@ void readAirSensor(SensorPacket *packet) {
 void readTemHumSensor(SensorPacket *packet) {
     if (tempHumPresent) {
         float temp = sht31.readTemperature();
-        packet->temperature = (int32_t)round(temp * 10);
-        packet->has_temperature = true;
+        if (!config.data.traceHeaterEnabled) {
+            packet->temperature = (int32_t)round(temp * 10);
+            packet->has_temperature = true;
+        }
         float humidity = sht31.readHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
         packet->has_humidity = true;

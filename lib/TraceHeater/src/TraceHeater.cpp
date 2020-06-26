@@ -41,6 +41,7 @@ void TraceHeater::tick() {
         temp_amb = read_temp_funct();
         target_adjust = 0.0;
         if (isinf(temp_amb)) {
+            heaterLog.info("SHT31 not available! Turning off and going to INIT");
             return;
         }
         heaterLog.info("initial temperature is %f", temp_amb);
@@ -48,13 +49,11 @@ void TraceHeater::tick() {
     case TRACE_AIM:
         heaterLog.info("Heater State: TRACE_AIM");
         temp_target =
-            temp_amb + 11.0 -
-            target_adjust; // Aiming for 11 degrees higher often gives us about 10 degrees higher
-        if (temp_target > TRACE_HEATER_SAFETY_MAX_TEMP) {
+            temp_amb + 11.0; // Aiming for 11 degrees higher often gives us about 10 degrees higher
+        if (temp_target - target_adjust > TRACE_HEATER_SAFETY_MAX_TEMP) {
             target_adjust =
                 (temp_target -
                  TRACE_HEATER_SAFETY_MAX_TEMP); // temp_target = TRACE_HEATER_SAFETY_MAX_TEMP;
-            temp_target = temp_amb + 11.0 - target_adjust; // Recalculate
         }
         if (isinf(temp_m)) {
             digitalWrite(heat_pin, off_value);
@@ -62,9 +61,9 @@ void TraceHeater::tick() {
             heaterLog.info("SHT31 not available! Turning off and going to INIT");
             break;
         }
-        heaterLog.info("Heater attempting to reach target %f, current temp is %f", temp_target,
-                       temp_m);
-        if (temp_target > (temp_m + TRACE_HEATER_ALLOWED_AIM_ERROR)) {
+        heaterLog.info("Heater attempting to reach target %f, current temp is %f",
+                       temp_target - target_adjust, temp_m);
+        if (temp_target - target_adjust > (temp_m + TRACE_HEATER_ALLOWED_AIM_ERROR)) {
             digitalWrite(heat_pin, on_value);
             heaterLog.info("Heating up to reach target temperature!");
             trace_heater_st = TRACE_AIM;
@@ -78,7 +77,7 @@ void TraceHeater::tick() {
                 equal_count = 0;
             }
             break;
-        } else if (temp_target < (temp_m - TRACE_HEATER_ALLOWED_AIM_ERROR)) {
+        } else if (temp_target - target_adjust < (temp_m - TRACE_HEATER_ALLOWED_AIM_ERROR)) {
             equal_count = 0;
             digitalWrite(heat_pin, off_value);
             heaterLog.info("Cooling down to reach target temperature!");
@@ -103,7 +102,8 @@ void TraceHeater::tick() {
         }
     case TRACE_COMPARE_CALC:
         heaterLog.info("Heater State: TRACE_COMPARE_CALC");
-        temp_e = getExpectedTemperature(TRACE_HEATER_COOL_PERIOD / 1000.0, temp_amb, temp_target);
+        temp_e = getExpectedTemperature(TRACE_HEATER_COOL_PERIOD / 1000.0, temp_amb,
+                                        temp_target - target_adjust);
         if (isinf(temp_m)) {
             digitalWrite(heat_pin, off_value);
             trace_heater_st = TRACE_INIT;
