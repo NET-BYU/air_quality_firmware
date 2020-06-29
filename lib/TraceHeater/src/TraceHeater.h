@@ -40,7 +40,6 @@ class TraceHeater {
     void reset();
     void begin();
 
-    // NEW
     void setTimeConst(uint32_t time_const) { this->tau = time_const; };
     void setTempFunct(float (*read_temp_funct)(void)) { this->read_temp_funct = read_temp_funct; };
 

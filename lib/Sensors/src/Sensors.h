@@ -91,10 +91,10 @@ class Sensors {
     bool rtcPresent = true;
     bool rtcSet = true;
 
-    Adafruit_SHT31 sht31; // = Adafruit_SHT31();
+    Adafruit_SHT31 sht31;
     float tempMeasurement;
     float humidityMeasurement;
-    bool tempHumPresent; // = true;
+    bool tempHumPresent;
 
     // Serial device
 #define SERIAL_DATA_SIZE 200

@@ -14,6 +14,7 @@ void Sensors::setup(PersistentConfig *config) {
     setupTempHum();
     setupCOSensor();
     setupEnergySensor();
+    setupTraceHeater(config);
     traceHeater.begin();
 }
 
