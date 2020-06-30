@@ -15,7 +15,6 @@ void Sensors::setup(PersistentConfig *config) {
     setupCOSensor();
     setupEnergySensor();
     setupTraceHeater(config);
-    traceHeater.begin();
 }
 
 bool Sensors::isRTCPresent() {
@@ -130,6 +129,7 @@ void Sensors::setupTraceHeater(PersistentConfig *config) {
         }
         return INFINITY;
     });
+    traceHeater.begin();
 }
 
 void Sensors::read(SensorPacket *packet, PersistentConfig *config) {
