@@ -587,6 +587,18 @@ int cloudUnackMeasurement(String arg) {
     return 0;
 }
 
+int cloudCommand(const char *cloudCommand, int32_t value, bool settingValue, uint32_t &configVal) {
+    if (settingValue) {
+        Log.info("Updating %s (%ld)", cloudCommand, value);
+        configVal = value;
+        config.save();
+        config.print();
+        return 0;
+    } else {
+        return configVal;
+    }
+}
+
 int cloudParameters(String arg) {
     bool settingValue = true;
     int32_t value = 0;
@@ -624,40 +636,17 @@ int cloudParameters(String arg) {
         publishStatus = true;
         return 0;
     }
+
     if (strncmp(command, "readPeriodMs", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating readPeriodMs (%ld)", value);
-            config.data.readPeriodMs = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.readPeriodMs;
-        }
+        return cloudCommand("readPeriodMs", value, settingValue, config.data.readPeriodMs);
     }
 
     if (strncmp(command, "uploadPeriodMs", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating uploadPeriodMs (%ld)", value);
-            config.data.uploadPeriodMs = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.uploadPeriodMs;
-        }
+        return cloudCommand("uploadPeriodMs", value, settingValue, config.data.uploadPeriodMs);
     }
 
     if (strncmp(command, "printSysInfoMs", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating printSysInfoMs (%ld)", value);
-            config.data.printSysInfoMs = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.printSysInfoMs;
-        }
+        return cloudCommand("printSysInfoMs", value, settingValue, config.data.printSysInfoMs);
     }
 
     if (strncmp(command, "enablePrintSystemInfo", commandLength) == 0) {
@@ -676,39 +665,16 @@ int cloudParameters(String arg) {
     }
 
     if (strncmp(command, "uploadBatchSize", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating uploadBatchSize (%ld)", value);
-            config.data.uploadBatchSize = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.uploadBatchSize;
-        }
+        return cloudCommand("uploadBatchSize", value, settingValue, config.data.uploadBatchSize);
     }
 
     if (strncmp(command, "maxPubSize", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating maxPubSize (%ld)", value);
-            config.data.maxPubSize = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.maxPubSize;
-        }
+        return cloudCommand("maxPubSize", value, settingValue, config.data.maxPubSize);
     }
 
     if (strncmp(command, "delayBeforeReboot", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating delayBeforeReboot (%ld)", value);
-            config.data.delayBeforeReboot = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.delayBeforeReboot;
-        }
+        return cloudCommand("delayBeforeReboot", value, settingValue,
+                            config.data.delayBeforeReboot);
     }
 
     if (strncmp(command, "resetConfig", commandLength) == 0) {
@@ -759,45 +725,17 @@ int cloudParameters(String arg) {
     }
 
     if (strncmp(command, "traceHeaterEnabled", commandLength) == 0) {
-        if (settingValue) {
-            uint32_t enable;
-            if (value == 1) {
-                enable = 1;
-            } else {
-                enable = 0;
-            }
-            Log.info("Setting traceHeaterEnabled to %ld", enable);
-            config.data.traceHeaterEnabled = enable;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.traceHeaterEnabled;
-        }
+        cloudCommand("traceHeaterEnabled", (value == 1), settingValue,
+                     config.data.traceHeaterEnabled);
     }
 
     if (strncmp(command, "countryVoltage", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating countryVoltage (%ld)", value);
-            config.data.countryVoltage = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.countryVoltage;
-        }
+        return cloudCommand("countryVoltage", value, settingValue, config.data.countryVoltage);
     }
 
     if (strncmp(command, "heaterPowerFactor", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating heaterPowerFactor (%ld)", value);
-            config.data.heaterPowerFactor = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.heaterPowerFactor;
-        }
+        return cloudCommand("heaterPowerFactor", value, settingValue,
+                            config.data.heaterPowerFactor);
     }
 
     if (strncmp(command, "powerSource", commandLength) == 0) {
