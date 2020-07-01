@@ -1,6 +1,7 @@
 #ifndef SENSORS_H_
 #define SENSORS_H_
 
+#include "DiagnosticsHelperRK.h"
 #include "PersistentConfig.h"
 #include "RTClibrary.h"
 #include "SPS30.h"
