@@ -725,21 +725,8 @@ int cloudParameters(String arg) {
     }
 
     if (strncmp(command, "traceHeaterEnabled", commandLength) == 0) {
-        if (settingValue) {
-            uint32_t enable;
-            if (value == 1) {
-                enable = 1;
-            } else {
-                enable = 0;
-            }
-            Log.info("Setting traceHeaterEnabled to %ld", enable);
-            config.data.traceHeaterEnabled = enable;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.traceHeaterEnabled;
-        }
+        cloudCommand("traceHeaterEnabled", (value == 1), settingValue,
+                     config.data.traceHeaterEnabled);
     }
 
     if (strncmp(command, "countryVoltage", commandLength) == 0) {
