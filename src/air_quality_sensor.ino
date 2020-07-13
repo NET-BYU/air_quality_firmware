@@ -90,6 +90,7 @@ bool tempHumPresent = true;
 
 // CO Sensor
 bool coPresent = true;
+bool coSetup = false;
 
 // Power Management IC
 #if PLATFORM_ID == PLATFORM_BORON
@@ -98,7 +99,7 @@ PMIC pmic;
 
 // Serial device
 #define SERIAL_DATA_SIZE 200
-char serialData[SERIAL_DATA_SIZE];
+char serialData[SERIAL_DATA_SIZE + 1];
 bool newSerialData = false;
 
 // Global variables to keep track of state
@@ -221,13 +222,7 @@ void setup() {
     // Setup co sensor
     Serial1.begin(9600);
     Serial1.flush();
-    delay(1000);
-    Serial1.write('A'); // Set the running average so it uses 300 measurements
-    delay(1000);
-    Serial1.print(300);
-    delay(500);
-    Serial1.write('\r'); // Request a measurement
-    delay(2500);
+    delay(5000);
 
     // delay(5000);
 
@@ -313,6 +308,13 @@ void setup() {
 
 void loop() // Print out RTC status in loop
 {
+    if (!coSetup) {
+        Serial1.write('c'); // Request a measurement
+        Serial1.flush();
+        serialLog.info("Writing: c");
+        delay(2500);
+        coSetup = true;
+    }
     // Read sensor task
     if (readDataFlag) {
         sensorLed.Blink(1000, 1000).Update();
@@ -559,8 +561,9 @@ AckTracker *getAckTrackerForReading() {
 
 void serialEvent1() {
     serialLog.info("SerialEvent1!");
-    Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
-    serialLog.info("Serial Data received: %s\n", serialData);
+    size_t numBytes = Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
+    serialData[numBytes] = '\0';
+    // serialLog.info("Serial Data received: %s\n", serialData);
     newSerialData = true;
 }
 
@@ -789,30 +792,41 @@ void readQueue(SensorPacket *packet) {
 
 void readCOSensor(SensorPacket *packet) {
     if (newSerialData) {
-        uint32_t sensorNum;
-        float conc;
-        float temp;
-        float rh;
-        uint32_t conc_c;
-        uint32_t temp_c;
-        uint32_t rh_c;
-        uint32_t days;
-        uint32_t hours;
-        uint32_t minutes;
-        uint32_t seconds;
+        unsigned int offset = 0;
+        int32_t conc = INT32_MAX;
+        int32_t temp = INT32_MAX;
+        int32_t rh = INT32_MAX;
+        int32_t conc_c = INT32_MAX;
+        int32_t temp_c = INT32_MAX;
+        int32_t rh_c = INT32_MAX;
+        int32_t days = INT32_MAX;
+        int32_t hours = INT32_MAX;
+        int32_t minutes = INT32_MAX;
+        int32_t seconds = INT32_MAX;
+        for (offset = 0;
+             offset <= SERIAL_DATA_SIZE && serialData[offset] != '\0' && serialData[offset] != ',';
+             offset++) {
+        }
+        if (serialData[offset] != ',') {
+            return;
+        }
+        serialLog.info("Serial Data received: %s\n", serialData + offset);
         int result =
-            sscanf(serialData, "%lu, %f, %f, %f, %lu, %lu, %lu, %lu, %lu, %lu, %lu", &sensorNum,
-                   &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
-        if (result == 11) {
+            sscanf(serialData + offset, ", %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld", &conc,
+                   &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
+        if (result == 10) {
+            Log.info("readCOSensor(): Result of %d, Reading co value of %ld", result, conc);
+            serialLog.info("Data: %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld", conc, temp, rh, conc_c,
+                           temp_c, rh_c, days, hours, minutes, seconds);
+            packet->co = conc;
             packet->has_co = true;
-            packet->co = (uint32_t)(conc * 100);
-            Log.info("readCOSensor(): Result of %d, Reading co value of %f, transmitting %ld",
-                     result, conc, packet->co);
         } else {
-            Log.error("readCOSensor(): Could not interpret co value");
+            serialLog.info("Data: %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld", conc, temp, rh, conc_c,
+                           temp_c, rh_c, days, hours, minutes, seconds);
+            Log.info("readCOSensor(): Could not interpret co value. Number of elements scanned: %d",
+                     result);
         }
         newSerialData = false;
-        Serial1.write('\r'); // Ask for another measurement from the CO sensor
     }
 }
 
@@ -1142,6 +1156,7 @@ int cloudParameters(String arg) {
     if (strncmp(command, "zeroCO", commandLength) == 0) {
         Serial1.write("Z");
         Log.info("Zero-ing CO sensor");
+        Serial1.flush();
         return 0;
     }
 
