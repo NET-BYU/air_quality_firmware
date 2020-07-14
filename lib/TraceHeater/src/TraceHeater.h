@@ -30,6 +30,7 @@ typedef enum trace_heater_st_e {
 
 class TraceHeater {
   public:
+    TraceHeater();
     TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void), uint16_t heat_pin,
                 uint8_t on_value);
     TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void));
@@ -39,6 +40,9 @@ class TraceHeater {
     void reset();
     void begin();
     float getEstimatedTemperature();
+
+    void setTimeConst(uint32_t time_const) { this->tau = time_const; };
+    void setTempFunct(float (*read_temp_funct)(void)) { this->read_temp_funct = read_temp_funct; };
 
   private:
     float getExpectedTemperature(

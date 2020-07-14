@@ -4,13 +4,9 @@
 #include "MemoryAckTracker.h"
 #include "PersistentConfig.h"
 #include "PersistentCounter.h"
-#include "RTClibrary.h"
-#include "SPS30.h"
 #include "SdCardLogHandlerRK.h"
 #include "SdFat.h"
-#include "SparkFun_SCD30_Arduino_Library.h"
-#include "TraceHeater.h"
-#include "adafruit-sht31.h"
+#include "Sensors.h"
 #include "base85.h"
 #include "jled.h"
 #include "pb_encode.h"
@@ -27,16 +23,6 @@ PRODUCT_VERSION(3);
 PRODUCT_ID(9861);
 PRODUCT_VERSION(3);
 #endif
-
-// Energy Sensor Stuff
-#define ENERGY_SENSOR_PRESENT_PIN D6
-#define AC_PIN A0         // set arduino signal read pin
-#define ACTectionRange 20 // set Non-invasive AC Current Sensor tection range (5A,10A,20A)
-#define VREF 3.3          // VREF: Analog reference
-// #define UPPER_VOLTAGE_THRESHOLD 3000    // Some value less than ADC_MAX used for detecting a pull
-// down resistor
-#define ENERGY_SENSOR_DETECTED                                                                     \
-    LOW // What the ENERGY_SENSOR_PRESENT_PIN should read if there is an energy sensor
 
 // Battery Stuff
 #define BATTERY_POWER_PIN D2 // Controls the relay and boost converter for the battery
@@ -66,44 +52,10 @@ AckTracker *currentTracker;
 uint32_t pendingPublishes = 0;
 bool trackerSetup = true;
 
-// PM Sensor
-SPS30 pmSensor;
-float pmMeasurement[4]; // PM 1, 2.5, 4, 10
-bool pmSensorSetup = true;
-
-// CO2 + Temp + Humidity Sensor
-SCD30 airSensor;
-bool airSensorSetup = true;
-
-// RTC
-RTC_DS3231 rtc;
-bool rtcPresent = true;
-bool rtcSet = true;
-
-#define TEMP_HUM_I2C_ADDR 0x44 // Set to 0x45 for alternate i2c addr
-
-// Temp + Humidity Sensor
-Adafruit_SHT31 sht31; // = Adafruit_SHT31();
-float tempMeasurement;
-float humidityMeasurement;
-bool tempHumPresent = true;
-
-// CO Sensor
-bool coPresent = true;
-bool coSetup = false;
-
 // Power Management IC
 #if PLATFORM_ID == PLATFORM_BORON
 PMIC pmic;
 #endif
-
-// Serial device
-#define SERIAL_DATA_SIZE 200
-char serialData[SERIAL_DATA_SIZE + 1];
-bool newSerialData = false;
-
-// Global variables to keep track of state
-int resetReason = RESET_REASON_NONE;
 
 // Publishing information
 particle::Future<bool> currentPublish;
@@ -156,6 +108,7 @@ Logger csvLog("app.csv");
 
 SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_WARN,
                                     {{"app", LOG_LEVEL_INFO},
+                                     {"app.Sensor", LOG_LEVEL_INFO},
                                      {"app.encode", LOG_LEVEL_INFO},
                                      {"app.csv", LOG_LEVEL_NONE},
                                      {"FileAckTracker", LOG_LEVEL_INFO},
@@ -171,40 +124,14 @@ STARTUP(csvLogHandler.withDesiredFileSize(1000000UL)
 
 STARTUP(sdLogHandler.withMaxFilesToKeep(1000));
 
+// Sensors
+Sensors *Sensors::instance = 0;
+Sensors *allSensors = allSensors->getInstance();
+
 // Particle system stuff
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 STARTUP(System.enableFeature(FEATURE_RESET_INFO));
-
-TraceHeater traceHeater(config.data.boardTimeConstant, []() {
-    if (tempHumPresent) {
-        return sht31.readTemperature();
-    }
-    return INFINITY;
-});
-
-float readACCurrentValue() {
-    float ACCurrtntValue = 0;
-    int32_t peakVoltage = 0;
-    float voltageVirtualValue = 0; // Vrms
-    for (int i = 0; i < 1000; i++) {
-        peakVoltage += analogRead(AC_PIN); // read peak voltage
-        delay(1);
-    }
-    peakVoltage = peakVoltage / 1000;
-    Serial.printf("ADC:%x\t\t", peakVoltage);
-    voltageVirtualValue =
-        peakVoltage * 0.707; // change the peak voltage to the Virtual Value of voltage
-
-    /*The circuit is amplified by 2 times, so it is divided by 2.*/
-    voltageVirtualValue = (voltageVirtualValue / 4096 * VREF) / 2;
-
-    Log.info("voltageVirtualValue=%f", voltageVirtualValue);
-
-    ACCurrtntValue = voltageVirtualValue * ACTectionRange;
-
-    return ACCurrtntValue;
-}
 
 void setup() {
     // Set up cloud functions
@@ -213,23 +140,10 @@ void setup() {
     Particle.function("unack", cloudUnackMeasurement);
     Particle.function("param", cloudParameters);
 
-    // Get reset reason to publish later
-    resetReason = System.resetReason();
+    allSensors->setup(&config);
 
     // Debugging port
     Serial.begin(9600);
-
-    // Setup co sensor
-    Serial1.begin(9600);
-    Serial1.flush();
-    delay(5000);
-
-    // delay(5000);
-
-    pinMode(ENERGY_SENSOR_PRESENT_PIN, INPUT_PULLUP);
-    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED) {
-        Log.info("Energy sensor present!");
-    }
 
     pinMode(BATTERY_POWER_PIN, OUTPUT);
     digitalWrite(BATTERY_POWER_PIN, BATTERY_OFF_OUT);
@@ -243,38 +157,6 @@ void setup() {
         Log.info("Using file tracker.");
         currentTracker = &fileTracker;
     }
-
-    // Make sure RTC is really working
-    if (!rtc.begin() || !isRTCPresent()) {
-        Log.error("Could not start RTC!");
-        rtcPresent = false;
-    } else {
-        uint32_t now = rtc.now().unixtime();
-
-        // Now make sure the time is somewhat right
-        if (now < 1560000000) {
-            Log.warn("RTC is present, but has not been set.");
-            rtcSet = false;
-        }
-    }
-
-    if (!pmSensor.begin()) {
-        Log.error("Could not start PM sensor!");
-        pmSensorSetup = false;
-    }
-
-    if (!airSensor.begin()) {
-        Log.error("Could not start CO2 sensor!");
-        airSensorSetup = false;
-    }
-
-    if (!sht31.begin(TEMP_HUM_I2C_ADDR)) {
-        Serial.println("Couldn't find SHT31 (temp humidity)!");
-        tempHumPresent = false;
-    }
-    Serial.printf("sht31 status = %d\n", sht31.readStatus());
-
-    traceHeater.begin();
 
     delay(1000);
 
@@ -308,13 +190,7 @@ void setup() {
 
 void loop() // Print out RTC status in loop
 {
-    if (!coSetup) {
-        Serial1.write('c'); // Request a measurement
-        Serial1.flush();
-        serialLog.info("Writing: c");
-        delay(2500);
-        coSetup = true;
-    }
+    allSensors->isCOSetup();
     // Read sensor task
     if (readDataFlag) {
         sensorLed.Blink(1000, 1000).Update();
@@ -393,9 +269,9 @@ void loop() // Print out RTC status in loop
     if (publishStatus && !currentlyPublishing && Particle.connected()) {
         StaticJsonDocument<200> doc;
         doc["tracker"] = trackerSetup;
-        doc["rtc"] = rtcPresent;
-        doc["pm"] = pmSensorSetup;
-        doc["air"] = airSensorSetup;
+        doc["rtc"] = allSensors->getRTCPresent();
+        doc["pm"] = allSensors->getPmSensorSetup();
+        doc["air"] = allSensors->getAirSensorSetup();
 
         char output[200];
         serializeJson(doc, output, sizeof(output));
@@ -443,20 +319,21 @@ void loop() // Print out RTC status in loop
     }
 
     if (updateRTCFlag) {
-        rtcPresent = isRTCPresent();
-        rtcSet = false; // Allow RTC to sync with time from cloud
+        allSensors->setRTCPresent(allSensors->isRTCPresent());
+        allSensors->setRTCSet(false); // Allow RTC to sync with time from cloud
         updateRTCFlag = false;
     }
 
     // Update RTC if needed
-    if (rtcPresent && !rtcSet && Particle.connected() && Time.isValid()) {
+    if (allSensors->getRTCPresent() && !allSensors->getRTCSet() && Particle.connected() &&
+        Time.isValid()) {
         Log.info("Setting clock...");
-        rtc.adjust(DateTime(Time.now()));
-        rtcSet = true;
+        allSensors->rtc.adjust(DateTime(Time.now()));
+        allSensors->setRTCSet(true);
 
         delay(500);
 
-        DateTime now = rtc.now();
+        DateTime now = allSensors->rtc.now();
         uint32_t timestamp = now.unixtime();
         Log.info("Time is set to: %ld", timestamp);
     }
@@ -464,7 +341,7 @@ void loop() // Print out RTC status in loop
     if (handleHeaterFlag) {
         if (config.data.traceHeaterEnabled) {
             Log.info("handling heater!");
-            traceHeater.tick();
+            allSensors->traceHeater.tick();
         }
         handleHeaterFlag = false;
     }
@@ -559,14 +436,6 @@ AckTracker *getAckTrackerForReading() {
     return currentTracker;
 }
 
-void serialEvent1() {
-    serialLog.info("SerialEvent1!");
-    size_t numBytes = Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
-    serialData[numBytes] = '\0';
-    // serialLog.info("Serial Data received: %s\n", serialData);
-    newSerialData = true;
-}
-
 bool connecting() {
 #if Wiring_WiFi
     return WiFi.connecting() || !Particle.connected();
@@ -624,164 +493,6 @@ void getMeasurements(uint8_t *data, uint32_t maxLength, uint32_t *length, uint32
     Log.info("Length of data: %ld", *length);
 }
 
-bool isRTCPresent() {
-    uint32_t first = rtc.now().unixtime();
-    delay(1000);
-    uint32_t second = rtc.now().unixtime();
-
-    return first != second;
-}
-
-void readRTC(SensorPacket *packet) {
-    if (rtcPresent) {
-        Log.info("readRTC(): RTC is present");
-        DateTime now = rtc.now();
-        packet->timestamp = now.unixtime();
-    } else {
-        Log.error("readRTC(): RTC is NOT present!");
-        packet->timestamp = Time.now();
-    }
-    if (rtcSet) {
-        Log.info("readRTC(): RTC is set");
-    } else {
-        Log.error("readRTC(): RTC is NOT set!");
-    }
-    if (rtcPresent) {
-        packet->rtc_temperature = rtc.getTemperature();
-        packet->has_rtc_temperature = true;
-    }
-}
-
-void readPMSensor(SensorPacket *packet) {
-    if (pmSensor.dataAvailable()) {
-        pmSensor.getMass(pmMeasurement);
-
-        for (size_t i = 0; i < sizeof(pmMeasurement) / sizeof(pmMeasurement[0]); i++) {
-            if (pmMeasurement[i] > INT32_MAX) {
-                pmMeasurement[i] = INT32_MAX;
-            }
-        }
-
-        packet->pm1 = pmMeasurement[0];
-        packet->has_pm1 = true;
-        packet->pm2_5 = pmMeasurement[1];
-        packet->has_pm2_5 = true;
-        packet->pm4 = pmMeasurement[2];
-        packet->has_pm4 = true;
-        packet->pm10 = pmMeasurement[3];
-        packet->has_pm10 = true;
-    } else {
-        // There should always be data available so begin measuring again
-        pmSensor.begin();
-    }
-}
-
-void readAirSensor(SensorPacket *packet) {
-    if (airSensor.dataAvailable()) {
-        uint32_t co2 = airSensor.getCO2();
-        packet->co2 = co2;
-        packet->has_co2 = true;
-
-        float temp = airSensor.getTemperature();
-        if (!config.data.traceHeaterEnabled) {
-            packet->temperature = (int32_t)round(temp * 10);
-            packet->has_temperature = true;
-        }
-
-        float humidity = airSensor.getHumidity();
-        packet->humidity = (uint32_t)round(humidity * 10);
-        packet->has_humidity = true;
-        Log.info("readAirSensor(): CO2 - CO2=%ld, temp=%ld, hum=%ld", packet->co2,
-                 packet->temperature, packet->humidity);
-    } else {
-        Log.error("can't read CO2");
-        // There should always be data available so begin measuring again
-        airSensor.begin();
-    }
-}
-
-void readTemHumSensor(SensorPacket *packet) {
-    if (tempHumPresent) {
-        float temp = sht31.readTemperature();
-        if (!config.data.traceHeaterEnabled) {
-            packet->temperature = (int32_t)round(temp * 10);
-            packet->has_temperature = true;
-        }
-        float humidity = sht31.readHumidity();
-        packet->humidity = (uint32_t)round(humidity * 10);
-        packet->has_humidity = true;
-
-        Log.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld", packet->temperature,
-                 packet->humidity);
-    } else {
-        sht31.begin(TEMP_HUM_I2C_ADDR);
-    }
-}
-
-void readEnergySensor(SensorPacket *packet) {
-    if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED) {
-        Log.info("readEnergySensor(): Energy sensor detected.");
-        float acCurrentValue = readACCurrentValue(); // read AC Current Value
-        float heaterPF =
-            ((float)config.data.heaterPowerFactor / 1000.0f); // Puts power factor into float form
-        float measuredPower =
-            acCurrentValue * config.data.countryVoltage * heaterPF; // Calculates real power
-        Log.info("heaterPowerFactor: pf=%f", heaterPF);
-        Log.info("countryVoltage: int voltage=%ld", config.data.countryVoltage);
-        Log.info("readEnergySensor(): float current=%f", acCurrentValue);
-        packet->has_current = true;
-        packet->current = (int32_t)(acCurrentValue * 1000);
-        Log.info("readEnergySensor(): float power=%f", measuredPower);
-        packet->has_power = true;
-        packet->power = (int32_t)measuredPower;
-    }
-}
-
-void readResetReason(SensorPacket *packet) {
-    if (resetReason != RESET_REASON_NONE) {
-        packet->reset_reason = resetReason;
-        packet->has_reset_reason = true;
-
-        if (resetReason == RESET_REASON_PANIC) {
-            uint32_t resetReasondata = System.resetReasonData();
-            packet->reset_reason_data = resetReasondata;
-            packet->has_reset_reason_data = true;
-        }
-
-        // Make sure to read reset reason only once
-        resetReason = RESET_REASON_NONE;
-    }
-}
-
-void readBatteryCharge(SensorPacket *packet) {
-#if PLATFORM_ID == PLATFORM_BORON
-    if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
-        DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_UNKNOWN) {
-        Log.warn("The battery is either disconnected or in an unknown state.");
-        packet->has_battery_charge = false;
-    } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY) {
-        int32_t batteryCharge = (int32_t)roundf(System.batteryCharge());
-        Log.info("System.batteryCharge(): %ld%%", batteryCharge);
-        packet->has_battery_charge = true;
-        packet->battery_charge = batteryCharge;
-    } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) != POWER_SOURCE_BATTERY) {
-        Log.info("The sensor is plugged-in or connected via USB");
-        packet->has_battery_charge = false;
-    }
-#endif
-}
-
-void readTraceHeater(SensorPacket *packet) {
-    if (config.data.traceHeaterEnabled) {
-        packet->estimated_temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
-        packet->has_estimated_temperature = true;
-        if (traceHeater.hasNewTemperatureData()) {
-            packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
-            packet->has_temperature = true;
-        }
-    }
-}
-
 void readQueue(SensorPacket *packet) {
     uint32_t unconfirmedCount;
     if (currentTracker->unconfirmedCount(&unconfirmedCount)) {
@@ -790,69 +501,12 @@ void readQueue(SensorPacket *packet) {
     }
 }
 
-void readCOSensor(SensorPacket *packet) {
-    if (newSerialData) {
-        unsigned int offset = 0;
-        int32_t conc = INT32_MAX;
-        int32_t temp = INT32_MAX;
-        int32_t rh = INT32_MAX;
-        int32_t conc_c = INT32_MAX;
-        int32_t temp_c = INT32_MAX;
-        int32_t rh_c = INT32_MAX;
-        int32_t days = INT32_MAX;
-        int32_t hours = INT32_MAX;
-        int32_t minutes = INT32_MAX;
-        int32_t seconds = INT32_MAX;
-        for (offset = 0;
-             offset <= SERIAL_DATA_SIZE && serialData[offset] != '\0' && serialData[offset] != ',';
-             offset++) {
-        }
-        if (serialData[offset] != ',') {
-            return;
-        }
-        serialLog.info("Serial Data received: %s\n", serialData + offset);
-        int result =
-            sscanf(serialData + offset, ", %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld", &conc,
-                   &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
-        if (result == 10) {
-            Log.info("readCOSensor(): Result of %d, Reading co value of %ld", result, conc);
-            serialLog.info("Data: %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld", conc, temp, rh, conc_c,
-                           temp_c, rh_c, days, hours, minutes, seconds);
-            packet->co = conc;
-            packet->has_co = true;
-        } else {
-            serialLog.info("Data: %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld", conc, temp, rh, conc_c,
-                           temp_c, rh_c, days, hours, minutes, seconds);
-            Log.info("readCOSensor(): Could not interpret co value. Number of elements scanned: %d",
-                     result);
-        }
-        newSerialData = false;
-    }
-}
-
-void readFreeMem(SensorPacket *packet) {
-#if Wiring_WiFi
-    uint32_t freeMem = System.freeMemory();
-    packet->free_memory = freeMem;
-    packet->has_free_memory = true;
-#endif
-}
-
 void readSensors(SensorPacket *packet) {
-    readRTC(packet);
+    allSensors->read(packet, &config);
     packet->sequence = sequence.get();
     packet->card_present = currentTracker == &fileTracker;
     packet->has_card_present = true;
     readQueue(packet);
-    readPMSensor(packet);
-    readAirSensor(packet);
-    readTemHumSensor(packet);
-    readEnergySensor(packet);
-    readTraceHeater(packet);
-    readResetReason(packet);
-    readCOSensor(packet);
-    readBatteryCharge(packet);
-    readFreeMem(packet);
 #if PLATFORM_ID == PLATFORM_BORON
     Log.info("readSensors(): InputSourceRegister=0x%x", pmic.readInputSourceRegister());
 #endif
@@ -931,6 +585,18 @@ int cloudUnackMeasurement(String arg) {
     return 0;
 }
 
+int cloudCommand(const char *cloudCommand, int32_t value, bool settingValue, uint32_t &configVal) {
+    if (settingValue) {
+        Log.info("Updating %s (%ld)", cloudCommand, value);
+        configVal = value;
+        config.save();
+        config.print();
+        return 0;
+    } else {
+        return configVal;
+    }
+}
+
 int cloudParameters(String arg) {
     bool settingValue = true;
     int32_t value = 0;
@@ -968,40 +634,17 @@ int cloudParameters(String arg) {
         publishStatus = true;
         return 0;
     }
+
     if (strncmp(command, "readPeriodMs", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating readPeriodMs (%ld)", value);
-            config.data.readPeriodMs = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.readPeriodMs;
-        }
+        return cloudCommand("readPeriodMs", value, settingValue, config.data.readPeriodMs);
     }
 
     if (strncmp(command, "uploadPeriodMs", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating uploadPeriodMs (%ld)", value);
-            config.data.uploadPeriodMs = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.uploadPeriodMs;
-        }
+        return cloudCommand("uploadPeriodMs", value, settingValue, config.data.uploadPeriodMs);
     }
 
     if (strncmp(command, "printSysInfoMs", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating printSysInfoMs (%ld)", value);
-            config.data.printSysInfoMs = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.printSysInfoMs;
-        }
+        return cloudCommand("printSysInfoMs", value, settingValue, config.data.printSysInfoMs);
     }
 
     if (strncmp(command, "enablePrintSystemInfo", commandLength) == 0) {
@@ -1020,39 +663,16 @@ int cloudParameters(String arg) {
     }
 
     if (strncmp(command, "uploadBatchSize", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating uploadBatchSize (%ld)", value);
-            config.data.uploadBatchSize = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.uploadBatchSize;
-        }
+        return cloudCommand("uploadBatchSize", value, settingValue, config.data.uploadBatchSize);
     }
 
     if (strncmp(command, "maxPubSize", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating maxPubSize (%ld)", value);
-            config.data.maxPubSize = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.maxPubSize;
-        }
+        return cloudCommand("maxPubSize", value, settingValue, config.data.maxPubSize);
     }
 
     if (strncmp(command, "delayBeforeReboot", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating delayBeforeReboot (%ld)", value);
-            config.data.delayBeforeReboot = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.delayBeforeReboot;
-        }
+        return cloudCommand("delayBeforeReboot", value, settingValue,
+                            config.data.delayBeforeReboot);
     }
 
     if (strncmp(command, "resetConfig", commandLength) == 0) {
@@ -1064,7 +684,7 @@ int cloudParameters(String arg) {
 
     if (strncmp(command, "scd30SetAltitude", commandLength) == 0) {
         Log.info("Setting altitude on SCD30");
-        airSensor.setAltitudeCompensation(value);
+        allSensors->airSensor.setAltitudeCompensation(value);
         return 0;
     }
 
@@ -1073,7 +693,7 @@ int cloudParameters(String arg) {
         // Equivilant to airSensor.SetTemperatureOffset except that that method requires a float.
         // Rather than casting to a float and dividing by 100, just for that function to multiply
         // by 100 and cast back into a uint_16, I am calling the underlying method directly.
-        airSensor.sendCommand(COMMAND_SET_TEMPERATURE_OFFSET, value);
+        allSensors->airSensor.sendCommand(COMMAND_SET_TEMPERATURE_OFFSET, value);
         return 0;
     }
 
@@ -1084,12 +704,12 @@ int cloudParameters(String arg) {
 
     if (strncmp(command, "resetRTC", commandLength) == 0) {
         Log.info("Resetting RTC");
-        rtcSet = false;
+        allSensors->setRTCSet(false);
         return 0;
     }
 
     if (strncmp(command, "rtc", commandLength) == 0) {
-        return rtc.now().unixtime();
+        return allSensors->rtc.now().unixtime();
     }
 
     if (strncmp(command, "particleTime", commandLength) == 0) {
@@ -1098,50 +718,22 @@ int cloudParameters(String arg) {
 
     if (strncmp(command, "resetHeater", commandLength) == 0) {
         Log.info("Resetting Trace Heater");
-        traceHeater.reset();
+        allSensors->traceHeater.reset();
         return 0;
     }
 
     if (strncmp(command, "traceHeaterEnabled", commandLength) == 0) {
-        if (settingValue) {
-            uint32_t enable;
-            if (value == 1) {
-                enable = 1;
-            } else {
-                enable = 0;
-            }
-            Log.info("Setting traceHeaterEnabled to %ld", enable);
-            config.data.traceHeaterEnabled = enable;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.traceHeaterEnabled;
-        }
+        cloudCommand("traceHeaterEnabled", (value == 1), settingValue,
+                     config.data.traceHeaterEnabled);
     }
 
     if (strncmp(command, "countryVoltage", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating countryVoltage (%ld)", value);
-            config.data.countryVoltage = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.countryVoltage;
-        }
+        return cloudCommand("countryVoltage", value, settingValue, config.data.countryVoltage);
     }
 
     if (strncmp(command, "heaterPowerFactor", commandLength) == 0) {
-        if (settingValue) {
-            Log.info("Updating heaterPowerFactor (%ld)", value);
-            config.data.heaterPowerFactor = value;
-            config.save();
-            config.print();
-            return 0;
-        } else {
-            return config.data.heaterPowerFactor;
-        }
+        return cloudCommand("heaterPowerFactor", value, settingValue,
+                            config.data.heaterPowerFactor);
     }
 
     if (strncmp(command, "powerSource", commandLength) == 0) {
