@@ -28,6 +28,9 @@ class Sensors {
     void read(SensorPacket *packet, PersistentConfig *config);
     bool isRTCPresent();
     void isCOSetup();
+    // Setters
+    void setNewSerialData(bool newSerialData) { this->newSerialData = newSerialData; };
+    void addNullTermSerialData(size_t serialDataLength);
 
     // Getters
     bool getRTCPresent() { return rtcPresent; };
@@ -36,6 +39,7 @@ class Sensors {
     bool getAirSensorSetup() { return airSensorSetup; };
     bool getTempHumPresent() { return tempHumPresent; };
     Adafruit_SHT31 *getSHT31() { return &sht31; };
+    char *getSerialData() { return serialData; };
 
     // Setters
     void setRTCSet(bool isSetup) { rtcSet = isSetup; };
@@ -54,7 +58,6 @@ class Sensors {
 
     // Auxiliary functs for setup/read process
     float readACCurrentValue();
-    void serialEvent1();
 
     // Setup for individual sensors
     void setupRTC();
@@ -77,9 +80,6 @@ class Sensors {
     void readBatteryCharge(SensorPacket *packet);
     void readFreeMem(SensorPacket *packet);
     void readEnergySensor(SensorPacket *packet, PersistentConfig *config);
-
-    // Setters
-    void setNewSerialData(bool newSerialData) { this->newSerialData = newSerialData; };
 
     // PM Sensor
     SPS30 pmSensor;

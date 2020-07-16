@@ -35,6 +35,10 @@ void Sensors::isCOSetup() {
     }
 }
 
+void Sensors::addNullTermSerialData(size_t serialDataLength) {
+    serialData[serialDataLength] = '\0';
+}
+
 float Sensors::readACCurrentValue() {
     float ACCurrtntValue = 0;
     int32_t peakVoltage = 0;
@@ -56,14 +60,6 @@ float Sensors::readACCurrentValue() {
     ACCurrtntValue = voltageVirtualValue * ACTectionRange;
 
     return ACCurrtntValue;
-}
-
-void Sensors::serialEvent1() {
-    sensorLog.info("SerialEvent1!");
-    size_t numBytes = Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
-    serialData[numBytes] = '\0';
-    // serialLog.info("Serial Data received: %s\n", serialData);
-    newSerialData = true;
 }
 
 void Sensors::setupRTC() {

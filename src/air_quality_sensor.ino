@@ -436,6 +436,14 @@ AckTracker *getAckTrackerForReading() {
     return currentTracker;
 }
 
+void serialEvent1() {
+    serialLog.info("SerialEvent1!");
+    size_t numBytes = Serial1.readBytesUntil('\n', allSensors->getSerialData(), SERIAL_DATA_SIZE);
+    allSensors->addNullTermSerialData(numBytes);
+    // serialLog.info("Serial Data received: %s\n", serialData);
+    allSensors->setNewSerialData(true);
+}
+
 bool connecting() {
 #if Wiring_WiFi
     return WiFi.connecting() || !Particle.connected();
