@@ -52,9 +52,6 @@ AckTracker *currentTracker;
 uint32_t pendingPublishes = 0;
 bool trackerSetup = true;
 
-// CO Sensor
-bool coPresent = true;
-
 // Power Management IC
 #if PLATFORM_ID == PLATFORM_BORON
 PMIC pmic;
@@ -193,6 +190,7 @@ void setup() {
 
 void loop() // Print out RTC status in loop
 {
+    allSensors->isCOSetup();
     // Read sensor task
     if (readDataFlag) {
         sensorLed.Blink(1000, 1000).Update();
@@ -436,6 +434,14 @@ AckTracker *getAckTrackerForReading() {
     }
 
     return currentTracker;
+}
+
+void serialEvent1() {
+    serialLog.info("SerialEvent1!");
+    size_t numBytes = Serial1.readBytesUntil('\n', allSensors->getSerialData(), SERIAL_DATA_SIZE);
+    allSensors->addNullTermSerialData(numBytes);
+    // serialLog.info("Serial Data received: %s\n", serialData);
+    allSensors->setNewSerialData(true);
 }
 
 bool connecting() {
@@ -750,7 +756,20 @@ int cloudParameters(String arg) {
     if (strncmp(command, "zeroCO", commandLength) == 0) {
         Serial1.write("Z");
         Log.info("Zero-ing CO sensor");
+        Serial1.flush();
         return 0;
+    }
+
+    if (strncmp(command, "boardTimeConstant", commandLength) == 0) {
+        if (settingValue) {
+            Log.info("Updating board time constant");
+            config.data.boardTimeConstant = value;
+            config.save();
+            config.print();
+            return 0;
+        } else {
+            return config.data.boardTimeConstant;
+        }
     }
 
     Log.error("No matching command: %s", argStr);

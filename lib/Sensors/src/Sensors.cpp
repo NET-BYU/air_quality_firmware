@@ -25,6 +25,20 @@ bool Sensors::isRTCPresent() {
     return first != second;
 }
 
+void Sensors::isCOSetup() {
+    if (!coSetup) {
+        Serial1.write('c'); // Request a measurement
+        Serial1.flush();
+        sensorLog.info("Writing: c");
+        delay(2500);
+        coSetup = true;
+    }
+}
+
+void Sensors::addNullTermSerialData(size_t serialDataLength) {
+    serialData[serialDataLength] = '\0';
+}
+
 float Sensors::readACCurrentValue() {
     float ACCurrtntValue = 0;
     int32_t peakVoltage = 0;
@@ -46,13 +60,6 @@ float Sensors::readACCurrentValue() {
     ACCurrtntValue = voltageVirtualValue * ACTectionRange;
 
     return ACCurrtntValue;
-}
-
-void Sensors::serialEvent1() {
-    sensorLog.info("SerialEvent1!");
-    Serial1.readBytesUntil('\n', serialData, SERIAL_DATA_SIZE);
-    sensorLog.info("Serial Data received: %s\n", serialData);
-    newSerialData = true;
 }
 
 void Sensors::setupRTC() {
@@ -105,13 +112,7 @@ void Sensors::setupCOSensor() {
     // Setup co sensor
     Serial1.begin(9600);
     Serial1.flush();
-    delay(1000);
-    Serial1.write('A'); // Set the running average so it uses 300 measurements
-    delay(1000);
-    Serial1.print(300);
-    delay(500);
-    Serial1.write('\r'); // Request a measurement
-    delay(2500);
+    delay(5000);
 }
 
 void Sensors::setupEnergySensor() {
@@ -175,8 +176,8 @@ void Sensors::readAirSensor(SensorPacket *packet, PersistentConfig *config) {
         packet->co2 = co2;
         packet->has_co2 = true;
 
+        float temp = airSensor.getTemperature();
         if (!config->data.traceHeaterEnabled) {
-            float temp = airSensor.getTemperature();
             packet->temperature = (int32_t)round(temp * 10);
             packet->has_temperature = true;
         }
@@ -195,8 +196,8 @@ void Sensors::readAirSensor(SensorPacket *packet, PersistentConfig *config) {
 
 void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
     if (tempHumPresent) {
+        float temp = sht31.readTemperature();
         if (!config->data.traceHeaterEnabled) {
-            float temp = sht31.readTemperature();
             packet->temperature = (int32_t)round(temp * 10);
             packet->has_temperature = true;
         }
@@ -212,9 +213,13 @@ void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
 }
 
 void Sensors::readTraceHeater(SensorPacket *packet, PersistentConfig *config) {
-    if (config->data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
-        packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
-        packet->has_temperature = true;
+    if (config->data.traceHeaterEnabled) {
+        packet->estimated_temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
+        packet->has_estimated_temperature = true;
+        if (traceHeater.hasNewTemperatureData()) {
+            packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
+            packet->has_temperature = true;
+        }
     }
 }
 
@@ -240,30 +245,41 @@ void Sensors::readRTC(SensorPacket *packet) {
 
 void Sensors::readCOSensor(SensorPacket *packet) {
     if (newSerialData) {
-        uint32_t sensorNum;
-        float conc;
-        float temp;
-        float rh;
-        uint32_t conc_c;
-        uint32_t temp_c;
-        uint32_t rh_c;
-        uint32_t days;
-        uint32_t hours;
-        uint32_t minutes;
-        uint32_t seconds;
+        unsigned int offset = 0;
+        int32_t conc = INT32_MAX;
+        int32_t temp = INT32_MAX;
+        int32_t rh = INT32_MAX;
+        int32_t conc_c = INT32_MAX;
+        int32_t temp_c = INT32_MAX;
+        int32_t rh_c = INT32_MAX;
+        int32_t days = INT32_MAX;
+        int32_t hours = INT32_MAX;
+        int32_t minutes = INT32_MAX;
+        int32_t seconds = INT32_MAX;
+        for (offset = 0;
+             offset <= SERIAL_DATA_SIZE && serialData[offset] != '\0' && serialData[offset] != ',';
+             offset++) {
+        }
+        if (serialData[offset] != ',') {
+            return;
+        }
+        sensorLog.info("Serial Data received: %s\n", serialData + offset);
         int result =
-            sscanf(serialData, "%lu, %f, %f, %f, %lu, %lu, %lu, %lu, %lu, %lu, %lu", &sensorNum,
-                   &conc, &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
-        if (result == 11) {
+            sscanf(serialData + offset, ", %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld, %ld", &conc,
+                   &temp, &rh, &conc_c, &temp_c, &rh_c, &days, &hours, &minutes, &seconds);
+        if (result == 10) {
+            Log.info("readCOSensor(): Result of %d, Reading co value of %ld", result, conc);
+            sensorLog.info("Data: %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld", conc, temp, rh, conc_c,
+                           temp_c, rh_c, days, hours, minutes, seconds);
+            packet->co = conc;
             packet->has_co = true;
-            packet->co = (uint32_t)(conc * 100);
-            sensorLog.info("readCOSensor(): Result of %d, Reading co value of %f, transmitting %ld",
-                           result, conc, packet->co);
         } else {
-            sensorLog.error("readCOSensor(): Could not interpret co value");
+            sensorLog.info("Data: %ld %ld %ld %ld %ld %ld %ld %ld %ld %ld", conc, temp, rh, conc_c,
+                           temp_c, rh_c, days, hours, minutes, seconds);
+            Log.info("readCOSensor(): Could not interpret co value. Number of elements scanned: %d",
+                     result);
         }
         newSerialData = false;
-        Serial1.write('\r'); // Ask for another measurement from the CO sensor
     }
 }
 
