@@ -67,6 +67,8 @@ typedef struct _SensorPacket {
     int32_t co;
     bool has_estimated_temperature;
     int32_t estimated_temperature;
+    bool has_internal_humidity;
+    int32_t internal_humidity;
 } SensorPacket;
 
 /* Initializer values for message structs */
@@ -74,13 +76,15 @@ typedef struct _SensorPacket {
     {                                                                                              \
         0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0,      \
             false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, \
-            0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0      \
+            0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0,     \
+            false, 0                                                                               \
     }
 #define SensorPacket_init_zero                                                                     \
     {                                                                                              \
         0, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0,      \
             false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, \
-            0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0      \
+            0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0, false, 0,     \
+            false, 0                                                                               \
     }
 
 /* Field tags (for use in manual encoding/decoding) */
@@ -98,6 +102,7 @@ typedef struct _SensorPacket {
 #define SensorPacket_app_version_tag 12
 #define SensorPacket_battery_charge_tag 13
 #define SensorPacket_internal_temperature_tag 15
+#define SensorPacket_internal_humidity_tag 29
 #define SensorPacket_co2_tag 16
 #define SensorPacket_voltage_tag 17
 #define SensorPacket_current_tag 18
@@ -140,7 +145,8 @@ typedef struct _SensorPacket {
     X(a, STATIC, OPTIONAL, INT32, power_factor, 25)                                                \
     X(a, STATIC, OPTIONAL, INT32, reset_reason_data, 26)                                           \
     X(a, STATIC, OPTIONAL, INT32, co, 27)                                                          \
-    X(a, STATIC, OPTIONAL, INT32, estimated_temperature, 28)
+    X(a, STATIC, OPTIONAL, INT32, estimated_temperature, 28)                                       \
+    X(a, STATIC, OPTIONAL, INT32, internal_humidity, 29)
 #define SensorPacket_CALLBACK NULL
 #define SensorPacket_DEFAULT NULL
 
@@ -150,7 +156,7 @@ extern const pb_msgdesc_t SensorPacket_msg;
 #define SensorPacket_fields &SensorPacket_msg
 
 /* Maximum encoded size of messages (where known) */
-#define SensorPacket_size 286
+#define SensorPacket_size 298
 
 #ifdef __cplusplus
 } /* extern "C" */

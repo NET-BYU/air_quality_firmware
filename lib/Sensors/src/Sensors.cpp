@@ -136,7 +136,7 @@ void Sensors::setupTraceHeater(PersistentConfig *config) {
 void Sensors::setupDHT22() {
     dht22.begin();
     delay(2000); // Apparently the DHT22 takes a while to gather all readings
-    if (isnan(dht22.readTemperature())) {
+    if (isnan(dht22.readTemperature()) || isnan(dht22.readHumidity())) {
         dht22Setup = false;
     } else {
         dht22Setup = true;
@@ -213,11 +213,11 @@ void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
             packet->has_internal_temperature = true;
         }
         float humidity = sht31.readHumidity();
-        packet->humidity = (uint32_t)round(humidity * 10);
-        packet->has_humidity = true;
+        packet->internal_humidity = (uint32_t)round(humidity * 10);
+        packet->has_internal_humidity = true;
 
         sensorLog.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld",
-                       packet->internal_temperature, packet->humidity);
+                       packet->internal_temperature, packet->internal_humidity);
     } else {
         sht31.begin(TEMP_HUM_I2C_ADDR);
     }
@@ -349,9 +349,12 @@ void Sensors::readEnergySensor(SensorPacket *packet, PersistentConfig *config) {
 void Sensors::readDHT22(SensorPacket *packet) {
     if (dht22Setup) {
         packet->has_temperature = true;
+        packet->has_humidity = true;
         packet->temperature = dht22.readTemperature();
+        packet->humidity = dht22.readHumidity();
     } else {
         sensorLog.warn("DHT22 is not set up");
         packet->has_temperature = false;
+        packet->has_humidity = false;
     }
 };
