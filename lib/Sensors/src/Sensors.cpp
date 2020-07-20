@@ -349,7 +349,7 @@ void Sensors::readEnergySensor(SensorPacket *packet, PersistentConfig *config) {
 void Sensors::readDHT22(SensorPacket *packet) {
     if (dht22Setup) {
         packet->has_temperature = true;
-        packet->temperature = dht22.readTemperature(true);
+        packet->temperature = dht22.readTemperature();
     } else {
         sensorLog.warn("DHT22 is not set up");
         packet->has_temperature = false;

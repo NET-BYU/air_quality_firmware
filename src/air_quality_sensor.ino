@@ -726,8 +726,8 @@ int cloudParameters(String arg) {
     }
 
     if (strncmp(command, "traceHeaterEnabled", commandLength) == 0) {
-        cloudCommand("traceHeaterEnabled", (value == 1), settingValue,
-                     config.data.traceHeaterEnabled);
+        return cloudCommand("traceHeaterEnabled", (value == 1), settingValue,
+                            config.data.traceHeaterEnabled);
     }
 
     if (strncmp(command, "countryVoltage", commandLength) == 0) {
