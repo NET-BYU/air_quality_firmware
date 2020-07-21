@@ -15,7 +15,7 @@ void Sensors::setup(PersistentConfig *config) {
     setupCOSensor();
     setupEnergySensor();
     setupTraceHeater(config);
-    setupDHT22();
+    // setupDHT22();
 }
 
 bool Sensors::isRTCPresent() {
