@@ -68,7 +68,7 @@ class Sensors {
     void setupCOSensor();
     void setupEnergySensor();
     void setupTraceHeater(PersistentConfig *config);
-    // void setupDHT22();
+    void setupDHT22();
 
     // Read for individual sensors
     void readRTC(SensorPacket *packet);
