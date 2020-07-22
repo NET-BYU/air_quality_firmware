@@ -2,26 +2,30 @@
 
 TraceHeater::TraceHeater() : heaterLog("TraceHeater") {
     this->tau = TRACE_HEATER_DEFAULT_BOARD_TAU;
-    this->read_temp_funct = NULL;
+    this->read_int_temp_funct = NULL;
+    this->read_ext_temp_funct = NULL;
     this->heat_pin = TRACE_HEATER_PIN;
     this->on_value = TRACE_HEATER_ON;
     this->off_value = !TRACE_HEATER_ON;
 }
 
-TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void),
-                         uint16_t heat_pin, uint8_t on_value)
+TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_int_temp_funct)(void),
+                         float (*read_ext_temp_funct)(void), uint16_t heat_pin, uint8_t on_value)
     : heaterLog("TraceHeater") {
     this->tau = board_time_const;
-    this->read_temp_funct = read_temp_funct;
+    this->read_int_temp_funct = read_int_temp_funct;
+    this->read_ext_temp_funct = read_ext_temp_funct;
     this->heat_pin = heat_pin;
     this->on_value = on_value;
     this->off_value = !on_value;
 }
 
-TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void))
+TraceHeater::TraceHeater(uint32_t board_time_const, float (*read_int_temp_funct)(void),
+                         float (*read_ext_temp_funct)(void))
     : heaterLog("TraceHeater") {
     this->tau = board_time_const;
-    this->read_temp_funct = read_temp_funct;
+    this->read_int_temp_funct = read_int_temp_funct;
+    this->read_ext_temp_funct = read_ext_temp_funct;
     this->heat_pin = TRACE_HEATER_PIN;
     this->on_value = TRACE_HEATER_ON;
     this->off_value = !TRACE_HEATER_ON;
@@ -36,14 +40,14 @@ void TraceHeater::begin() {
 void TraceHeater::tick() {
     float temp_m = 0.0;
     float temp_e = 0.0;
-    if (read_temp_funct == NULL) {
+    if (read_int_temp_funct == NULL || read_ext_temp_funct == NULL) {
         return;
     }
     switch (trace_heater_st) {
     case TRACE_INIT:
         heaterLog.info("Heater State: TRACE_INIT");
         digitalWrite(heat_pin, off_value);
-        temp_amb = read_temp_funct();
+        temp_amb = read_ext_temp_funct();
         if (isinf(temp_amb)) {
             return;
         }
@@ -55,7 +59,7 @@ void TraceHeater::tick() {
             temp_amb + 11.0; // Aiming for 11 degrees higher often gives us about 10 degrees higher
         if (temp_target > TRACE_HEATER_SAFETY_MAX_TEMP)
             temp_target = TRACE_HEATER_SAFETY_MAX_TEMP;
-        temp_m = read_temp_funct();
+        temp_m = read_int_temp_funct();
         if (isinf(temp_m)) {
             digitalWrite(heat_pin, off_value);
             trace_heater_st = TRACE_INIT;
@@ -93,7 +97,7 @@ void TraceHeater::tick() {
     case TRACE_COMPARE_CALC:
         heaterLog.info("Heater State: TRACE_COMPARE_CALC");
         temp_e = getExpectedTemperature(TRACE_HEATER_COOL_PERIOD / 1000.0, temp_amb, temp_target);
-        temp_m = read_temp_funct();
+        temp_m = read_int_temp_funct();
         if (isinf(temp_m)) {
             digitalWrite(heat_pin, off_value);
             trace_heater_st = TRACE_INIT;
@@ -111,7 +115,7 @@ void TraceHeater::tick() {
             heaterLog.info("Heater: Just right! Temperature is 10 degrees above ambient.");
             temp_amb = temp_m - 10.0;
             has_new_data = true;
-            temperature_data = temp_amb;
+            ext_temperature_data = temp_amb;
         }
         trace_heater_st = TRACE_AIM;
     }
@@ -121,7 +125,7 @@ bool TraceHeater::hasNewTemperatureData() { return has_new_data; }
 
 float TraceHeater::getTemperatureData() {
     has_new_data = false;
-    return temperature_data;
+    return ext_temperature_data;
 }
 
 // Calculate what the board temperature should be after the given elapsed time (seconds) and the
@@ -134,7 +138,7 @@ float TraceHeater::getExpectedTemperature(float t, float ambientTemp, float init
 void TraceHeater::reset() {
     trace_heater_st = TRACE_INIT;
     has_new_data = false;
-    temperature_data = 0.0;
+    ext_temperature_data = 0.0;
     temp_amb = 0.0;
     temp_target = 10.0;
     elapsed_cool_cycles = 0;

@@ -38,6 +38,7 @@ class Sensors {
 
     bool getTempHumPresent() { return tempHumPresent; };
     Adafruit_SHT31 *getSHT31() { return &sht31; };
+    DHT *getDHT22() { return &dht22; };
 
     // Setters
     void setRTCSet(bool isSetup) { rtcSet = isSetup; };

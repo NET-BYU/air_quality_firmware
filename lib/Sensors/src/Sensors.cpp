@@ -124,9 +124,15 @@ void Sensors::setupEnergySensor() {
 
 void Sensors::setupTraceHeater(PersistentConfig *config) {
     traceHeater.setTimeConst(config->data.boardTimeConstant);
-    traceHeater.setTempFunct([]() {
+    traceHeater.setIntTempFunct([]() {
         if (getInstance()->getTempHumPresent()) {
             return getInstance()->getSHT31()->readTemperature();
+        }
+        return INFINITY;
+    });
+    traceHeater.setExtTempFunct([]() {
+        if (getInstance()->getDHT22() != NULL) {
+            return getInstance()->getDHT22()->readTemperature();
         }
         return INFINITY;
     });
@@ -135,8 +141,8 @@ void Sensors::setupTraceHeater(PersistentConfig *config) {
 
 void Sensors::setupDHT22() {
     dht22.begin();
-    delay(2000); // Apparently the DHT22 takes a while to gather all readings
-    if (isnan(dht22.readTemperature()) || isnan(dht22.readHumidity())) {
+    delay(4000); // Apparently the DHT22 takes a while to gather all readings
+    if (isnan(dht22.readTemperature()) /* || isnan(dht22.readHumidity())*/) {
         dht22Setup = false;
     } else {
         dht22Setup = true;

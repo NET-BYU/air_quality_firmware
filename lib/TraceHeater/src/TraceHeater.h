@@ -31,9 +31,10 @@ typedef enum trace_heater_st_e {
 class TraceHeater {
   public:
     TraceHeater();
-    TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void), uint16_t heat_pin,
-                uint8_t on_value);
-    TraceHeater(uint32_t board_time_const, float (*read_temp_funct)(void));
+    TraceHeater(uint32_t board_time_const, float (*read_int_temp_funct)(void),
+                float (*read_ext_temp_funct)(void), uint16_t heat_pin, uint8_t on_value);
+    TraceHeater(uint32_t board_time_const, float (*read_int_temp_funct)(void),
+                float (*read_ext_temp_funct)(void));
     void tick();
     bool hasNewTemperatureData();
     float getTemperatureData();
@@ -41,7 +42,12 @@ class TraceHeater {
     void begin();
 
     void setTimeConst(uint32_t time_const) { this->tau = time_const; };
-    void setTempFunct(float (*read_temp_funct)(void)) { this->read_temp_funct = read_temp_funct; };
+    void setIntTempFunct(float (*read_temp_funct)(void)) {
+        this->read_int_temp_funct = read_temp_funct;
+    };
+    void setExtTempFunct(float (*read_temp_funct)(void)) {
+        this->read_ext_temp_funct = read_temp_funct;
+    };
 
   private:
     float getExpectedTemperature(
@@ -49,7 +55,8 @@ class TraceHeater {
         float initTemp); // Calculate what the board temperature should be after the given elapsed
                          // time and the estimated time constant, ambient temperature, and the
                          // measured initial temperature
-    float (*read_temp_funct)(void);
+    float (*read_ext_temp_funct)(void);
+    float (*read_int_temp_funct)(void);
     // void (*turn_on_heater_funct)();
     // void (*turn_off_heater_funct)();
     uint16_t heat_pin = TRACE_HEATER_PIN;
@@ -57,7 +64,7 @@ class TraceHeater {
     uint8_t off_value = !TRACE_HEATER_ON;
     trace_heater_st_t trace_heater_st = TRACE_INIT;
     bool has_new_data = false;
-    float temperature_data = 0.0;
+    float ext_temperature_data = 0.0;
     float temp_amb = 0.0;
     float temp_target = 10.0;
     uint16_t elapsed_cool_cycles = 0;
