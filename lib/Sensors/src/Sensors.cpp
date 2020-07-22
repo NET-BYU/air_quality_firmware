@@ -15,7 +15,7 @@ void Sensors::setup(PersistentConfig *config) {
     setupCOSensor();
     setupEnergySensor();
     setupTraceHeater(config);
-    setupDHT22();
+    // setupDHT22();
 }
 
 bool Sensors::isRTCPresent() {
@@ -139,15 +139,15 @@ void Sensors::setupTraceHeater(PersistentConfig *config) {
     traceHeater.begin();
 }
 
-void Sensors::setupDHT22() {
-    dht22.begin();
-    delay(4000); // Apparently the DHT22 takes a while to gather all readings
-    if (isnan(dht22.readTemperature()) /* || isnan(dht22.readHumidity())*/) {
-        dht22Setup = false;
-    } else {
-        dht22Setup = true;
-    }
-}
+// void Sensors::setupDHT22() {
+//     dht22.begin();
+//     delay(2000); // Apparently the DHT22 takes a while to gather all readings
+//     if (isnan(dht22.readTemperature()) || isnan(dht22.readHumidity())) {
+//         dht22Setup = false;
+//     } else {
+//         dht22Setup = true;
+//     }
+// }
 
 void Sensors::read(SensorPacket *packet, PersistentConfig *config) {
     readRTC(packet);
@@ -160,7 +160,7 @@ void Sensors::read(SensorPacket *packet, PersistentConfig *config) {
     readBatteryCharge(packet);
     readFreeMem(packet);
     readEnergySensor(packet, config);
-    readDHT22(packet);
+    // readDHT22(packet);
 }
 
 void Sensors::readPMSensor(SensorPacket *packet) {
@@ -353,14 +353,19 @@ void Sensors::readEnergySensor(SensorPacket *packet, PersistentConfig *config) {
 }
 
 void Sensors::readDHT22(SensorPacket *packet) {
-    if (dht22Setup) {
-        packet->has_temperature = true;
-        packet->has_humidity = true;
+    dht22.begin();
+    // if (dht22Setup) {
+    packet->has_temperature = true;
+    packet->has_humidity = true;
+    float temp = dht22.readTemperature();
+    float hum = dht22.readHumidity();
+    if (!isnan(temp))
         packet->temperature = dht22.readTemperature();
+    if (!isnan(hum))
         packet->humidity = dht22.readHumidity();
-    } else {
-        sensorLog.warn("DHT22 is not set up");
-        packet->has_temperature = false;
-        packet->has_humidity = false;
-    }
+    // } else {
+    //     sensorLog.warn("DHT22 is not set up");
+    //     packet->has_temperature = false;
+    //     packet->has_humidity = false;
+    // }
 };
