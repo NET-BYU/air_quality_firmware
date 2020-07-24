@@ -230,9 +230,9 @@ void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
 }
 
 void Sensors::readTraceHeater(SensorPacket *packet, PersistentConfig *config) {
-    if (config->data.traceHeaterEnabled && traceHeater.hasNewTemperatureData()) {
-        packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
-        packet->has_temperature = true;
+    if (config->data.traceHeaterEnabled) {
+        packet->estimated_temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
+        packet->has_estimated_temperature = true;
     }
 }
 
@@ -353,21 +353,25 @@ void Sensors::readEnergySensor(SensorPacket *packet, PersistentConfig *config) {
 }
 
 void Sensors::readDHT22(SensorPacket *packet) {
-    // dht22.begin();
-    // if (dht22Setup) {
-    float temp = dht22.readTemperature();
-    float hum = dht22.readHumidity();
-    if (!isnan(temp)) {
-        packet->has_temperature = true;
-        packet->temperature = (int32_t)round(temp * 10);
+    float temp;
+    float hum;
+    bool temp_valid = false;
+    bool hum_valid = false;
+    for (uint8_t i = 0; i < 20 && !(temp_valid && hum_valid); i++) {
+        if (!temp_valid) {
+            temp = dht22.readTemperature();
+            if (!isnan(temp)) {
+                packet->has_temperature = true;
+                packet->temperature = (int32_t)round(temp * 10);
+                temp_valid = true;
+            }
+        }
+        if (!hum_valid) {
+            hum = dht22.readHumidity();
+            if (!isnan(hum)) {
+                packet->has_humidity = true;
+                packet->humidity = (uint32_t)round(hum * 10);
+            }
+        }
     }
-    if (!isnan(hum)) {
-        packet->has_humidity = true;
-        packet->humidity = (uint32_t)round(hum * 10);
-    }
-    // } else {
-    //     sensorLog.warn("DHT22 is not set up");
-    //     packet->has_temperature = false;
-    //     packet->has_humidity = false;
-    // }
 };

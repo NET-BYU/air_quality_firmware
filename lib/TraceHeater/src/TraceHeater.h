@@ -36,7 +36,6 @@ class TraceHeater {
     TraceHeater(uint32_t board_time_const, float (*read_int_temp_funct)(void),
                 float (*read_ext_temp_funct)(void));
     void tick();
-    bool hasNewTemperatureData();
     float getTemperatureData();
     void reset();
     void begin();
@@ -63,7 +62,6 @@ class TraceHeater {
     uint8_t on_value = TRACE_HEATER_ON;
     uint8_t off_value = !TRACE_HEATER_ON;
     trace_heater_st_t trace_heater_st = TRACE_INIT;
-    bool has_new_data = false;
     float ext_temperature_data = 0.0;
     float temp_amb = 0.0;
     float temp_target = 10.0;

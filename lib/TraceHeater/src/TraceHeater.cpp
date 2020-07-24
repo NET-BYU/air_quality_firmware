@@ -40,6 +40,7 @@ void TraceHeater::begin() {
 void TraceHeater::tick() {
     float temp_m = 0.0;
     float temp_e = 0.0;
+    float temp_ext = 0.0;
     if (read_int_temp_funct == NULL || read_ext_temp_funct == NULL) {
         return;
     }
@@ -111,22 +112,20 @@ void TraceHeater::tick() {
         } else if (temp_m > (temp_e + TRACE_HEATER_ALLOWED_COMPARE_ERROR)) {
             heaterLog.info("Heater: Too cold! Heating up.");
             temp_amb += TRACE_HEATER_DELTA;
+            temp_ext = read_ext_temp_funct();
+            if (temp_ext != INFINITY && temp_amb > temp_ext) {
+                temp_amb = temp_ext;
+            }
         } else {
             heaterLog.info("Heater: Just right! Temperature is 10 degrees above ambient.");
             temp_amb = temp_m - 10.0;
-            has_new_data = true;
             ext_temperature_data = temp_amb;
         }
         trace_heater_st = TRACE_AIM;
     }
 }
 
-bool TraceHeater::hasNewTemperatureData() { return has_new_data; }
-
-float TraceHeater::getTemperatureData() {
-    has_new_data = false;
-    return ext_temperature_data;
-}
+float TraceHeater::getTemperatureData() { return ext_temperature_data; }
 
 // Calculate what the board temperature should be after the given elapsed time (seconds) and the
 // estimated time constant (seconds), ambient temperature (Celsius), and the measured initial
@@ -137,7 +136,6 @@ float TraceHeater::getExpectedTemperature(float t, float ambientTemp, float init
 
 void TraceHeater::reset() {
     trace_heater_st = TRACE_INIT;
-    has_new_data = false;
     ext_temperature_data = 0.0;
     temp_amb = 0.0;
     temp_target = 10.0;
