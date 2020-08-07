@@ -195,10 +195,8 @@ void Sensors::readAirSensor(SensorPacket *packet, PersistentConfig *config) {
         packet->has_co2 = true;
 
         float temp = airSensor.getTemperature();
-        if (!config->data.traceHeaterEnabled) {
-            packet->temperature = (int32_t)round(temp * 10);
-            packet->has_temperature = true;
-        }
+        packet->temperature = (int32_t)round(temp * 10);
+        packet->has_temperature = true;
 
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
@@ -215,11 +213,8 @@ void Sensors::readAirSensor(SensorPacket *packet, PersistentConfig *config) {
 void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
     if (tempHumPresent) {
         float temp = sht31.readTemperature();
-        if (!config->data.traceHeaterEnabled) {
-            float temp = sht31.readTemperature();
-            packet->internal_temperature = (int32_t)round(temp * 10);
-            packet->has_internal_temperature = true;
-        }
+        packet->internal_temperature = (int32_t)round(temp * 10);
+        packet->has_internal_temperature = true;
         float humidity = sht31.readHumidity();
         packet->internal_humidity = (uint32_t)round(humidity * 10);
         packet->has_internal_humidity = true;
