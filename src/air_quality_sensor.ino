@@ -168,8 +168,9 @@ void setup() {
     csvLogHandler.setup();
     csvLog.print(
         "Timestamp,Sequence,Temperature,Humidity,RTC Temperature,PM1,PM2.5,PM4,PM10,SD Card "
-        "Present,Queue Size,CO2,CO,Voltage,Current,Energy,Power,Apparent Power,Reactive "
-        "Power,Power Factor,Free Memory,Reset Reason\n");
+        "Present,Queue Size,Battery Charge,CO2,CO,Voltage,Current,Energy,Power,Apparent "
+        "Power,Reactive "
+        "Power,Power Factor,Free Memory,Reset Reason,Estimated Temperature,Internal Temperature\n");
 
     // Start timers
     readTimer.start();
@@ -731,8 +732,8 @@ int cloudParameters(String arg) {
     }
 
     if (strncmp(command, "traceHeaterEnabled", commandLength) == 0) {
-        cloudCommand("traceHeaterEnabled", (value == 1), settingValue,
-                     config.data.traceHeaterEnabled);
+        return cloudCommand("traceHeaterEnabled", (value == 1), settingValue,
+                            config.data.traceHeaterEnabled);
     }
 
     if (strncmp(command, "countryVoltage", commandLength) == 0) {
@@ -829,6 +830,8 @@ void csvLogPacket(SensorPacket *packet) {
     csvLogToFile(packet->has_power_factor, packet->power_factor);
     csvLogToFile(packet->has_free_memory, packet->free_memory);
     csvLogToFile(packet->has_reset_reason, packet->reset_reason);
+    csvLogToFile(packet->has_estimated_temperature, packet->estimated_temperature);
+    csvLogToFile(packet->has_internal_temperature, packet->internal_temperature);
     csvLog.print("\n");
 }
 
@@ -863,4 +866,8 @@ void printPacket(SensorPacket *packet) {
     printPacketToLog("Power factor", packet->has_power_factor, packet->power_factor);
     printPacketToLog("Free Memory", packet->has_free_memory, packet->free_memory);
     printPacketToLog("Reset Reason", packet->has_reset_reason, packet->reset_reason);
+    printPacketToLog("Estimated Temperature", packet->has_estimated_temperature,
+                     packet->estimated_temperature);
+    printPacketToLog("Internal Temperature", packet->has_internal_temperature,
+                     packet->internal_temperature);
 }

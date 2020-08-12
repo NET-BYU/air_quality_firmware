@@ -1,6 +1,7 @@
 #ifndef SENSORS_H_
 #define SENSORS_H_
 
+#include "DHT.h"
 #include "DiagnosticsHelperRK.h"
 #include "PersistentConfig.h"
 #include "RTClibrary.h"
@@ -39,6 +40,7 @@ class Sensors {
     bool getAirSensorSetup() { return airSensorSetup; };
     bool getTempHumPresent() { return tempHumPresent; };
     Adafruit_SHT31 *getSHT31() { return &sht31; };
+    DHT *getDHT22() { return &dht22; };
     char *getSerialData() { return serialData; };
 
     // Setters
@@ -68,6 +70,7 @@ class Sensors {
     void setupCOSensor();
     void setupEnergySensor();
     void setupTraceHeater(PersistentConfig *config);
+    void setupDHT22();
 
     // Read for individual sensors
     void readRTC(SensorPacket *packet);
@@ -80,6 +83,7 @@ class Sensors {
     void readBatteryCharge(SensorPacket *packet);
     void readFreeMem(SensorPacket *packet);
     void readEnergySensor(SensorPacket *packet, PersistentConfig *config);
+    void readDHT22(SensorPacket *packet);
 
     // PM Sensor
     SPS30 pmSensor;
@@ -117,6 +121,12 @@ class Sensors {
 // down resistor
 #define ENERGY_SENSOR_DETECTED                                                                     \
     LOW // What the ENERGY_SENSOR_PRESENT_PIN should read if there is an energy sensor
+
+// DHT22
+#define DHTPIN D2
+#define DHTTYPE DHT22
+    bool dht22Setup = true;
+    DHT dht22;
 
 #ifdef PLATFORM_ID
     Logger sensorLog;

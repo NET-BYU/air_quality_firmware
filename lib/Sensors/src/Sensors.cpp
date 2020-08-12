@@ -1,6 +1,6 @@
 #include "Sensors.h"
 
-Sensors::Sensors() {
+Sensors::Sensors() : dht22(DHTPIN, DHTTYPE) {
 #ifdef PLATFORM_ID
     sensorLog("app.Sensors");
 #endif
@@ -15,6 +15,7 @@ void Sensors::setup(PersistentConfig *config) {
     setupCOSensor();
     setupEnergySensor();
     setupTraceHeater(config);
+    setupDHT22();
 }
 
 bool Sensors::isRTCPresent() {
@@ -124,13 +125,29 @@ void Sensors::setupEnergySensor() {
 
 void Sensors::setupTraceHeater(PersistentConfig *config) {
     traceHeater.setTimeConst(config->data.boardTimeConstant);
-    traceHeater.setTempFunct([]() {
+    traceHeater.setIntTempFunct([]() {
         if (getInstance()->getTempHumPresent()) {
             return getInstance()->getSHT31()->readTemperature();
         }
         return INFINITY;
     });
+    traceHeater.setExtTempFunct([]() {
+        if (getInstance()->getDHT22() != NULL) {
+            return getInstance()->getDHT22()->readTemperature();
+        }
+        return INFINITY;
+    });
     traceHeater.begin();
+}
+
+void Sensors::setupDHT22() {
+    dht22.begin();
+    delay(4000); // Apparently the DHT22 takes a while to gather all readings
+    // if (isnan(dht22.readTemperature()) || isnan(dht22.readHumidity())) {
+    //     dht22Setup = false;
+    // } else {
+    //     dht22Setup = true;
+    // }
 }
 
 void Sensors::read(SensorPacket *packet, PersistentConfig *config) {
@@ -144,6 +161,7 @@ void Sensors::read(SensorPacket *packet, PersistentConfig *config) {
     readBatteryCharge(packet);
     readFreeMem(packet);
     readEnergySensor(packet, config);
+    readDHT22(packet);
 }
 
 void Sensors::readPMSensor(SensorPacket *packet) {
@@ -177,10 +195,8 @@ void Sensors::readAirSensor(SensorPacket *packet, PersistentConfig *config) {
         packet->has_co2 = true;
 
         float temp = airSensor.getTemperature();
-        if (!config->data.traceHeaterEnabled) {
-            packet->temperature = (int32_t)round(temp * 10);
-            packet->has_temperature = true;
-        }
+        packet->temperature = (int32_t)round(temp * 10);
+        packet->has_temperature = true;
 
         float humidity = airSensor.getHumidity();
         packet->humidity = (uint32_t)round(humidity * 10);
@@ -197,16 +213,14 @@ void Sensors::readAirSensor(SensorPacket *packet, PersistentConfig *config) {
 void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
     if (tempHumPresent) {
         float temp = sht31.readTemperature();
-        if (!config->data.traceHeaterEnabled) {
-            packet->temperature = (int32_t)round(temp * 10);
-            packet->has_temperature = true;
-        }
+        packet->internal_temperature = (int32_t)round(temp * 10);
+        packet->has_internal_temperature = true;
         float humidity = sht31.readHumidity();
-        packet->humidity = (uint32_t)round(humidity * 10);
-        packet->has_humidity = true;
+        packet->internal_humidity = (uint32_t)round(humidity * 10);
+        packet->has_internal_humidity = true;
 
-        sensorLog.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld", packet->temperature,
-                       packet->humidity);
+        sensorLog.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld",
+                       packet->internal_temperature, packet->internal_humidity);
     } else {
         sht31.begin(TEMP_HUM_I2C_ADDR);
     }
@@ -216,10 +230,6 @@ void Sensors::readTraceHeater(SensorPacket *packet, PersistentConfig *config) {
     if (config->data.traceHeaterEnabled) {
         packet->estimated_temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
         packet->has_estimated_temperature = true;
-        if (traceHeater.hasNewTemperatureData()) {
-            packet->temperature = (int32_t)round(traceHeater.getTemperatureData() * 10);
-            packet->has_temperature = true;
-        }
     }
 }
 
@@ -306,15 +316,15 @@ void Sensors::readBatteryCharge(SensorPacket *packet) {
 #if PLATFORM_ID == PLATFORM_BORON
     if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_DISCONNECTED ||
         DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_BATTERY_STATE) == BATTERY_STATE_UNKNOWN) {
-        Log.warn("The battery is either disconnected or in an unknown state.");
+        sensorLog.warn("The battery is either disconnected or in an unknown state.");
         packet->has_battery_charge = false;
     } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) == POWER_SOURCE_BATTERY) {
         int32_t batteryCharge = (int32_t)roundf(System.batteryCharge());
-        Log.info("System.batteryCharge(): %ld%%", batteryCharge);
+        sensorLog.info("System.batteryCharge(): %ld%%", batteryCharge);
         packet->has_battery_charge = true;
         packet->battery_charge = batteryCharge;
     } else if (DiagnosticsHelper::getValue(DIAG_ID_SYSTEM_POWER_SOURCE) != POWER_SOURCE_BATTERY) {
-        Log.info("The sensor is plugged-in or connected via USB");
+        sensorLog.info("The sensor is plugged-in or connected via USB");
         packet->has_battery_charge = false;
     }
 #endif
@@ -333,19 +343,43 @@ void Sensors::readFreeMem(SensorPacket *packet) {
 
 void Sensors::readEnergySensor(SensorPacket *packet, PersistentConfig *config) {
     if (digitalRead(ENERGY_SENSOR_PRESENT_PIN) == ENERGY_SENSOR_DETECTED) {
-        Log.info("readEnergySensor(): Energy sensor detected.");
+        sensorLog.info("readEnergySensor(): Energy sensor detected.");
         float acCurrentValue = readACCurrentValue(); // read AC Current Value
         float heaterPF =
             ((float)config->data.heaterPowerFactor / 1000.0f); // Puts power factor into float form
         float measuredPower =
             acCurrentValue * config->data.countryVoltage * heaterPF; // Calculates real power
-        Log.info("heaterPowerFactor: pf=%f", heaterPF);
-        Log.info("countryVoltage: int voltage=%ld", config->data.countryVoltage);
-        Log.info("readEnergySensor(): float current=%f", acCurrentValue);
+        sensorLog.info("heaterPowerFactor: pf=%f", heaterPF);
+        sensorLog.info("countryVoltage: int voltage=%ld", config->data.countryVoltage);
+        sensorLog.info("readEnergySensor(): float current=%f", acCurrentValue);
         packet->has_current = true;
         packet->current = (int32_t)(acCurrentValue * 1000);
-        Log.info("readEnergySensor(): float power=%f", measuredPower);
+        sensorLog.info("readEnergySensor(): float power=%f", measuredPower);
         packet->has_power = true;
         packet->power = (int32_t)measuredPower;
     }
 }
+
+void Sensors::readDHT22(SensorPacket *packet) {
+    float temp;
+    float hum;
+    bool temp_valid = false;
+    bool hum_valid = false;
+    for (uint8_t i = 0; i < 20 && !(temp_valid && hum_valid); i++) {
+        if (!temp_valid) {
+            temp = dht22.readTemperature();
+            if (!isnan(temp)) {
+                packet->has_temperature = true;
+                packet->temperature = (int32_t)round(temp * 10);
+                temp_valid = true;
+            }
+        }
+        if (!hum_valid) {
+            hum = dht22.readHumidity();
+            if (!isnan(hum)) {
+                packet->has_humidity = true;
+                packet->humidity = (uint32_t)round(hum * 10);
+            }
+        }
+    }
+};
