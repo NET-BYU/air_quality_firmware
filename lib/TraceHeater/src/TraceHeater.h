@@ -54,6 +54,9 @@ class TraceHeater {
     void setExtTempFunct(float (*read_temp_funct)(void)) {
         this->read_ext_temp_funct = read_temp_funct;
     };
+    void setUnixTimeFunct(uint32_t (*read_unix_time_funct)(void)) {
+        this->read_unix_time_funct = read_unix_time_funct;
+    }
 
   private:
     float getExpectedTemperature(

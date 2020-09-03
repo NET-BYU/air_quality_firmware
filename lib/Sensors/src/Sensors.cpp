@@ -145,6 +145,13 @@ void Sensors::setupTraceHeater(PersistentConfig *config) {
         }
         return INFINITY;
     });
+    traceHeater.setUnixTimeFunct([]() {
+        uint32_t time = 0;
+        if (getInstance()->getRTCPresent()) {
+            time = getInstance()->rtc.now().unixtime();
+        }
+        return time;
+    });
     traceHeater.begin();
 }
 

@@ -169,15 +169,21 @@ void TraceHeater::tick() {
     }
     switch (trace_heater_st) {
     case TRACE_INIT:
-        temp_target = read_int_temp_funct() + 10.0;
+        heaterLog.info("state=TRACE_INIT");
+        temp_amb = read_int_temp_funct();
+        temp_target = temp_amb + 11.0;
+        heaterLog.info("Ambient=%f, Target=%f", temp_amb, temp_target);
         trace_heater_st = TRACE_AIM;
     case TRACE_AIM:
+        heaterLog.info("state=TRACE_AIM");
         if (temp_target > read_int_temp_funct()) {
             digitalWrite(heat_pin, on_value);
             temp_increasing = true;
+            heaterLog.info("Heating up to reach target %f", temp_target);
         } else {
             digitalWrite(heat_pin, off_value);
             temp_increasing = false;
+            heaterLog.info("Cooling down to reach target %f", temp_target);
         }
         trace_heater_st = TRACE_AIM_WAIT;
         wait_count = 0;
@@ -188,6 +194,7 @@ void TraceHeater::tick() {
         }
         break;
     case TRACE_AIM_WAIT:
+        heaterLog.info("state=TRACE_AIM_WAIT");
         if ((wait_count >= TWO_MINUTES) ||
             (read_unix_time_funct != NULL &&
              (read_unix_time_funct() - wait_start_time >= TWO_MINUTES_TIME)) ||
@@ -195,6 +202,7 @@ void TraceHeater::tick() {
             (!temp_increasing && read_int_temp_funct() <= temp_target)) {
             digitalWrite(heat_pin, off_value);
             T_0 = read_int_temp_funct();
+            heaterLog.info("Finished waiting after %d ticks, T_0=%f", wait_count, T_0);
             if (read_unix_time_funct != NULL) {
                 wait_start_time = read_unix_time_funct();
             } else {
@@ -205,19 +213,24 @@ void TraceHeater::tick() {
             break;
         } else {
             wait_count++;
+            break;
         }
     case TRACE_COOL:
+        heaterLog.info("state=TRACE_COOL");
         if (wait_count >= THIRTY_SECONDS ||
             (read_unix_time_funct != NULL &&
              (read_unix_time_funct() - wait_start_time >= THIRTY_SECONDS_TIME))) {
             T = read_int_temp_funct();
             if (read_unix_time_funct != NULL && wait_start_time != 0 &&
                 (end_time = read_unix_time_funct()) != 0) {
-                temp_amb = getAmbientTemperature((float)(end_time - wait_start_time), T_0, T);
+                temp_amb = getAmbientTemperature((float)(end_time - wait_start_time), T_0, T) + 1.0;
             } else {
-                temp_amb = getAmbientTemperature((float)(wait_count * 5), T_0, T);
+                temp_amb = getAmbientTemperature((float)(wait_count * 5), T_0, T) + 1.0;
+                heaterLog.info("Getting ambient temperature after %d seconds, with T_0=%f, T=%f. "
+                               "Result temp_amb=%f",
+                               wait_count * 5, T_0, T, temp_amb);
             }
-            temp_target = temp_amb + 10;
+            temp_target = temp_amb + 11.0;
             trace_heater_st = TRACE_AIM;
             break;
         } else {
@@ -245,7 +258,7 @@ float TraceHeater::getAmbientTemperature(float t, float initTemp, float afterTem
     }
     float denom = (1 - exp(-t / tau));
     if (denom == 0) {
-        Log.error("TraceHeater: t must be greater than 0!");
+        heaterLog.error("TraceHeater: t must be greater than 0!");
         return INFINITY;
     }
     return ((afterTemp - initTemp) / denom) + initTemp;
