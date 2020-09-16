@@ -379,6 +379,7 @@ void Sensors::readDHT22(SensorPacket *packet) {
             if (!isnan(hum)) {
                 packet->has_humidity = true;
                 packet->humidity = (uint32_t)round(hum * 10);
+                hum_valid = true;
             }
         }
     }
