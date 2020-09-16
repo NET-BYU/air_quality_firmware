@@ -382,5 +382,6 @@ void Sensors::readDHT22(SensorPacket *packet) {
                 hum_valid = true;
             }
         }
+        if (temp_valid && hum_valid) break;
     }
 };
