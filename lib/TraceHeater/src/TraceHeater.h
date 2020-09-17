@@ -21,20 +21,26 @@
 #define TRACE_HEATER_ALLOWED_AIM_ERROR 1.0
 
 typedef enum trace_heater_st_e {
-    TRACE_INIT, // Turn off the trace heater, measure initial temperature
-    TRACE_AIM,  // Calculate target temperature, turn on/off heater, wait until target temperature
-                // reached
-    TRACE_COOL, // Turn off the trace heater, wait TRACE_HEATER_COOL_PERIOD milliseconds
-    TRACE_COMPARE_CALC // See whether the ambient temperature was too high or too low
+    // TRACE_INIT, // Turn off the trace heater, measure initial temperature
+    // TRACE_AIM,  // Calculate target temperature, turn on/off heater, wait until target
+    // temperature
+    //             // reached
+    // TRACE_COOL, // Turn off the trace heater, wait TRACE_HEATER_COOL_PERIOD milliseconds
+    // TRACE_COMPARE_CALC // See whether the ambient temperature was too high or too low
+    TRACE_INIT,
+    TRACE_AIM,
+    TRACE_AIM_WAIT,
+    TRACE_COOL
 } trace_heater_st_t;
 
 class TraceHeater {
   public:
     TraceHeater();
     TraceHeater(uint32_t board_time_const, float (*read_int_temp_funct)(void),
-                float (*read_ext_temp_funct)(void), uint16_t heat_pin, uint8_t on_value);
+                float (*read_ext_temp_funct)(void), uint32_t (*read_unix_time_funct)(void),
+                uint16_t heat_pin, uint8_t on_value);
     TraceHeater(uint32_t board_time_const, float (*read_int_temp_funct)(void),
-                float (*read_ext_temp_funct)(void));
+                float (*read_ext_temp_funct)(void), uint32_t (*read_unix_time_funct)(void));
     void tick();
     float getTemperatureData();
     void reset();
@@ -48,6 +54,9 @@ class TraceHeater {
     void setExtTempFunct(float (*read_temp_funct)(void)) {
         this->read_ext_temp_funct = read_temp_funct;
     };
+    void setUnixTimeFunct(uint32_t (*read_unix_time_funct)(void)) {
+        this->read_unix_time_funct = read_unix_time_funct;
+    }
 
   private:
     float getExpectedTemperature(
@@ -55,8 +64,10 @@ class TraceHeater {
         float initTemp); // Calculate what the board temperature should be after the given elapsed
                          // time and the estimated time constant, ambient temperature, and the
                          // measured initial temperature
+    float getAmbientTemperature(float t, float initTemp, float afterTemp);
     float (*read_ext_temp_funct)(void);
     float (*read_int_temp_funct)(void);
+    uint32_t (*read_unix_time_funct)(void);
     uint16_t heat_pin = TRACE_HEATER_PIN;
     uint8_t on_value = TRACE_HEATER_ON;
     uint8_t off_value = !TRACE_HEATER_ON;
@@ -70,6 +81,11 @@ class TraceHeater {
     Logger heaterLog;
     float prev_temp_m = 0.0;
     uint16_t equal_count = 0;
+    bool temp_increasing = false;
+    uint16_t wait_count = 0;
+    uint32_t wait_start_time = 0;
+    uint32_t end_time = 0;
+    float T_0 = 0;
 };
 
 #endif

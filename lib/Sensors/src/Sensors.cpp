@@ -1,5 +1,7 @@
 #include "Sensors.h"
 
+#define DHT22_MAX_READ_ATTEMPTS 20
+
 Sensors::Sensors() : dht22(DHTPIN, DHTTYPE) {
 #ifdef PLATFORM_ID
     sensorLog("app.Sensors");
@@ -132,10 +134,23 @@ void Sensors::setupTraceHeater(PersistentConfig *config) {
         return INFINITY;
     });
     traceHeater.setExtTempFunct([]() {
-        if (getInstance()->getDHT22() != NULL) {
-            return getInstance()->getDHT22()->readTemperature();
+        float temp;
+        for (uint8_t i = 0; i < DHT22_MAX_READ_ATTEMPTS; i++) {
+            if (getInstance()->getDHT22() != NULL) {
+                temp = getInstance()->getDHT22()->readTemperature(false, true);
+                if (!isnan(temp)) {
+                    return temp;
+                }
+            }
         }
         return INFINITY;
+    });
+    traceHeater.setUnixTimeFunct([]() {
+        uint32_t time = 0;
+        if (getInstance()->getRTCPresent()) {
+            time = getInstance()->rtc.now().unixtime();
+        }
+        return time;
     });
     traceHeater.begin();
 }
@@ -365,9 +380,9 @@ void Sensors::readDHT22(SensorPacket *packet) {
     float hum;
     bool temp_valid = false;
     bool hum_valid = false;
-    for (uint8_t i = 0; i < 20 && !(temp_valid && hum_valid); i++) {
+    for (uint8_t i = 0; i < DHT22_MAX_READ_ATTEMPTS && !(temp_valid && hum_valid); i++) {
         if (!temp_valid) {
-            temp = dht22.readTemperature();
+            temp = dht22.readTemperature(false, true);
             if (!isnan(temp)) {
                 packet->has_temperature = true;
                 packet->temperature = (int32_t)round(temp * 10);
@@ -375,11 +390,12 @@ void Sensors::readDHT22(SensorPacket *packet) {
             }
         }
         if (!hum_valid) {
-            hum = dht22.readHumidity();
+            hum = dht22.readHumidity(true);
             if (!isnan(hum)) {
                 packet->has_humidity = true;
                 packet->humidity = (uint32_t)round(hum * 10);
+                hum_valid = true;
             }
         }
     }
-};
+}
