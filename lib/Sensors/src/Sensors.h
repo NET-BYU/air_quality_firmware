@@ -10,6 +10,7 @@
 #include "TraceHeater.h"
 #include "adafruit-sht31.h"
 #include "sensor_packet.pb.h"
+#include <math.h>
 
 #define TEMP_HUM_I2C_ADDR 0x44 // Set to 0x45 for alternate i2c addr
 
@@ -127,6 +128,10 @@ class Sensors {
 #define DHTTYPE DHT22
     bool dht22Setup = true;
     DHT dht22;
+    float old_temp = __FLT_MIN__;
+    float old_hum = __FLT_MIN__;
+    float last_bad_hum = __FLT_MIN__;
+    float last_bad_temp = __FLT_MIN__;
 
 #ifdef PLATFORM_ID
     Logger sensorLog;
