@@ -381,13 +381,14 @@ void Sensors::readDHT22(SensorPacket *packet) {
     bool temp_valid = false;
     bool hum_valid = false;
 
-#define MAX_DIFFERENCE 15
+#define TEMP_MAX_DIFFERENCE 15
+#define HUM_MAX_DIFFERENCE .15
     for (uint8_t i = 0; i < DHT22_MAX_READ_ATTEMPTS && !(temp_valid && hum_valid); i++) {
         if (!temp_valid) {
             temp = dht22.readTemperature(false, true);
             if (!isnan(temp)) {
                 packet->has_temperature = true;
-                if ((!(old_temp == __FLT_MIN__) && (fabs(old_temp - temp) < MAX_DIFFERENCE)) ||
+                if ((!(old_temp == __FLT_MIN__) && (fabs(old_temp - temp) < TEMP_MAX_DIFFERENCE)) ||
                     (old_temp == __FLT_MIN__)) {
                     packet->temperature = (int32_t)round(temp * 10);
                     old_temp = temp;
@@ -401,7 +402,7 @@ void Sensors::readDHT22(SensorPacket *packet) {
             hum = dht22.readHumidity(true);
             if (!isnan(hum)) {
                 packet->has_humidity = true;
-                if ((!(old_hum == __FLT_MIN__) && (fabs(old_hum - hum) < MAX_DIFFERENCE)) ||
+                if ((!(old_hum == __FLT_MIN__) && (fabs(old_hum - hum) < HUM_MAX_DIFFERENCE)) ||
                     (old_hum == __FLT_MIN__)) {
                     packet->humidity = (uint32_t)round(hum * 10);
                     old_hum = hum;
