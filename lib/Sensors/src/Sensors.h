@@ -128,7 +128,7 @@ class Sensors {
 #define DHTTYPE DHT22
 #define MAX_TEMP_DIFF 15
 #define MAX_HUM_DIFF .15
-#define COUNT_LIMIT 20
+#define COUNT_LIMIT 5
     bool dht22Setup = true;
     DHT dht22;
     float old_temp = __FLT_MIN__;

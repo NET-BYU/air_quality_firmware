@@ -385,7 +385,7 @@ void Sensors::readDHT22(SensorPacket *packet) {
             temp = dht22.readTemperature(false, true);
             if (!isnan(temp)) {
                 packet->has_temperature = true;
-                if (abs(old_temp - temp) < MAX_TEMP_DIFF || temp_count == COUNT_LIMIT ||
+                if (abs(old_temp - temp) < MAX_TEMP_DIFF || temp_count >= COUNT_LIMIT ||
                     old_temp == __FLT_MIN__) {
                     packet->temperature = (int32_t)round(temp * 10);
                     old_temp = temp;
@@ -401,7 +401,7 @@ void Sensors::readDHT22(SensorPacket *packet) {
             hum = dht22.readHumidity(true);
             if (!isnan(hum)) {
                 packet->has_humidity = true;
-                if (abs(old_hum - hum) < MAX_HUM_DIFF || hum_count == COUNT_LIMIT ||
+                if (abs(old_hum - hum) < MAX_HUM_DIFF || hum_count >= COUNT_LIMIT ||
                     old_hum == __FLT_MIN__) {
                     packet->humidity = (uint32_t)round(hum * 10);
                     old_hum = hum;
