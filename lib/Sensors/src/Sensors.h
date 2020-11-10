@@ -126,12 +126,15 @@ class Sensors {
 // DHT22
 #define DHTPIN D2
 #define DHTTYPE DHT22
+#define MAX_TEMP_DIFF 15
+#define MAX_HUM_DIFF .15
+#define COUNT_LIMIT 20
     bool dht22Setup = true;
     DHT dht22;
     float old_temp = __FLT_MIN__;
     float old_hum = __FLT_MIN__;
-    float last_bad_hum = __FLT_MIN__;
-    float last_bad_temp = __FLT_MIN__;
+    int temp_count = 0;
+    int hum_count = 0;
 
 #ifdef PLATFORM_ID
     Logger sensorLog;
