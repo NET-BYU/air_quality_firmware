@@ -91,8 +91,8 @@ Timer resetTimer(config.data.delayBeforeReboot, resetDevice,
 bool updateRTCFlag = false;
 Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
 
-bool handleHeaterFlag = true;
-Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() { handleHeaterFlag = true; });
+// bool handleHeaterFlag = true;
+// Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() { handleHeaterFlag = true; });
 
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
@@ -177,7 +177,7 @@ void setup() {
     uploadTimer.start();
     connectingTimer.start();
     updateRtcTimer.start();
-    traceHeaterTimer.start();
+    // traceHeaterTimer.start();
 
     if (config.data.enablePrintSystemInfo) {
         printSystemInfoTimer.start();
@@ -339,12 +339,8 @@ void loop() // Print out RTC status in loop
         Log.info("Time is set to: %ld", timestamp);
     }
 
-    if (handleHeaterFlag) {
-        if (config.data.traceHeaterEnabled) {
-            Log.info("handling heater!");
-            allSensors->traceHeater.tick();
-        }
-        handleHeaterFlag = false;
+    if (config.data.traceHeaterEnabled) {
+        allSensors->traceHeater.trace_heater_loop();
     }
 
     // Battery detection and handling, for keeping 5V sensors on with 3V battery
