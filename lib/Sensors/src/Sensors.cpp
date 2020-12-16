@@ -51,7 +51,7 @@ float Sensors::readACCurrentValue() {
         delay(1);
     }
     peakVoltage = peakVoltage / 1000;
-    Serial.printf("ADC:%x\t\t", peakVoltage);
+    sensorLog.info("ADC:%x\t\t", peakVoltage);
     voltageVirtualValue =
         peakVoltage * 0.707; // change the peak voltage to the Virtual Value of voltage
 
@@ -99,10 +99,10 @@ void Sensors::setupAir() {
 void Sensors::setupTempHum() {
     tempHumPresent = true;
     if (!sht31.begin(TEMP_HUM_I2C_ADDR)) {
-        Serial.println("Couldn't find SHT31 (temp humidity)!");
+        sensorLog.error("Couldn't find SHT31 (temp humidity)!");
         tempHumPresent = false;
     }
-    Serial.printf("sht31 status = %d\n", sht31.readStatus());
+    sensorLog.info("sht31 status = %d\n", sht31.readStatus());
 }
 
 void Sensors::setupResetReason() {
