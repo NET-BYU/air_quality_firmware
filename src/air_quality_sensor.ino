@@ -136,8 +136,7 @@ STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 void setup() {
     // Set up cloud functions
     Particle.function("reset", cloudReset);
-    Particle.function("resetCo", cloudResetCoprocessor);
-    Particle.function("unack", cloudUnackMeasurement);
+    // Particle.function("unack", cloudUnackMeasurement);
     Particle.function("param", cloudParameters);
 
     allSensors->setup(&config);
@@ -561,16 +560,8 @@ void checkConnecting() {
 }
 
 void resetDevice() {
-    Log.info("Rebooting coprocessor...");
-    resetCoprocessor();
-
     Log.info("Rebooting myself...");
     System.reset();
-}
-
-void resetCoprocessor() {
-    Serial1.printf("reset");
-    Serial1.flush();
 }
 
 int cloudReset(String arg) {
@@ -579,16 +570,10 @@ int cloudReset(String arg) {
     return 0;
 }
 
-int cloudResetCoprocessor(String arg) {
-    Serial.println("Cloud reset coprocessor called...");
-    resetCoprocessor();
-    return 0;
-}
-
-int cloudUnackMeasurement(String arg) {
-    // TODO: Put code here...
-    return 0;
-}
+// int cloudUnackMeasurement(String arg) {
+//     // TODO: Put code here...
+//     return 0;
+// }
 
 int cloudCommand(const char *cloudCommand, int32_t value, bool settingValue, uint32_t &configVal) {
     if (settingValue) {
