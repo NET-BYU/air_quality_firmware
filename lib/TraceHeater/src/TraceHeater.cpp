@@ -55,11 +55,16 @@ void TraceHeater::trace_heater_loop() {
     case heater_target_up:
         heaterLog.trace("heater_target_up state");
         this->T_H = this->T_E + 10; // TODO Consider whether we should make this 12?
-        // Add T_H_MAX cap
-        turn_on_heater();
-        this->t_h0 =
-            read_unix_time_funct(); // TODO think about RTC reliability. Should we use a counter?
-        this->state = heater_wait_until_heated;
+        if (this->T_H > TRACE_HEATER_SAFETY_MAX_TEMP) {
+            heaterLog.trace("Not running heater because it is too hot.");
+            turn_off_heater();
+            this->T_E = read_int_temp_funct();
+        } else {
+            turn_on_heater();
+            this->t_h0 = read_unix_time_funct(); // TODO think about RTC reliability. Should we use
+                                                 // a counter?
+            this->state = heater_wait_until_heated;
+        }
         break;
 
     case heater_wait_until_heated: // TODO: Control better how often it's called

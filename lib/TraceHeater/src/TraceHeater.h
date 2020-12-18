@@ -11,7 +11,7 @@
     LOW // LOW activates the PMOS, while HIGH disables the PMOS controlling the trace heater current
 #define TRACE_HEATER_DEFAULT_BOARD_TAU                                                             \
     1697 // Originally calculated to be 1592, but wasn't quite right
-// #define TRACE_HEATER_SAFETY_MAX_TEMP 39.0
+#define TRACE_HEATER_SAFETY_MAX_TEMP 21.0
 
 typedef enum trace_heater_st_e {
     heater_init,
