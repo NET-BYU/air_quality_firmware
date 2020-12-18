@@ -39,13 +39,19 @@ float TraceHeater::calculateAmbientTemperature(float tau, float t, float initTem
 }
 
 void TraceHeater::trace_heater_loop() {
+
     switch (this->state) {
     case heater_init:
         heaterLog.trace("heater_init state");
         turn_off_heater();
-        this->T_E = read_int_temp_funct();
-        this->state = heater_target_up;
+
+        internal_temperature = read_int_temp_funct();
+        if (internal_temperature != INFINITY) {
+            this->T_E = internal_temperature;
+            this->state = heater_target_up;
+        }
         break;
+
     case heater_target_up:
         heaterLog.trace("heater_target_up state");
         this->T_H = this->T_E + 10; // TODO Consider whether we should make this 12?
@@ -57,10 +63,11 @@ void TraceHeater::trace_heater_loop() {
         break;
 
     case heater_wait_until_heated: // TODO: Control better how often it's called
+        internal_temperature = read_int_temp_funct();
         heaterLog.trace(
             "heater_wait_until_heated state. Attempting to reach %f, but current temp is %f",
-            this->T_H, read_int_temp_funct());
-        if (read_int_temp_funct() >= this->T_H) {
+            this->T_H, internal_temperature);
+        if (internal_temperature >= this->T_H) {
             this->state = heater_target_down;
         }
         break;
@@ -77,24 +84,25 @@ void TraceHeater::trace_heater_loop() {
         break;
 
     case heater_wait_until_cooled:
+        internal_temperature = read_int_temp_funct();
         heaterLog.trace(
             "heater_wait_until_cooled state. Attempting to reach %f, but current temp is %f",
-            this->T_C, read_int_temp_funct());
-        if (read_int_temp_funct() >= this->T_H) {
-            if (read_int_temp_funct() <= this->T_C) {
-                this->state = heater_rebase;
-            }
-            break;
-
-        case heater_rebase:
-            heaterLog.trace("heater_rebase state");
-            this->t_c1 = read_unix_time_funct();
-            this->t_c = this->t_c1 - this->t_c0;
-            this->T_C_prime = read_int_temp_funct();
-            this->T_E =
-                calculateAmbientTemperature(this->tau, this->t_c, this->T_H_prime, this->T_C_prime);
-            break;
+            this->T_C, internal_temperature);
+        if (internal_temperature <= this->T_C) {
+            this->state = heater_rebase;
         }
+        break;
+
+    case heater_rebase:
+        heaterLog.trace("heater_rebase  state");
+        // heaterLog.trace("heater_rebase state");
+        this->t_c1 = read_unix_time_funct();
+        this->t_c = this->t_c1 - this->t_c0;
+        this->T_C_prime = read_int_temp_funct();
+        this->T_E =
+            calculateAmbientTemperature(this->tau, this->t_c, this->T_H_prime, this->T_C_prime);
+        this->state = heater_target_up;
+        break;
     }
 }
 
