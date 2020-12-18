@@ -31,6 +31,19 @@ class TraceHeater {
     void reset();
     void begin();
     float getEstimatedTemperature();
+    trace_heater_st_t state;
+    float T_E;
+    uint32_t t_h;
+    uint32_t t_h0;
+    uint32_t t_h1;
+    float T_H;
+    float T_H_prime;
+    uint32_t t_c;
+    uint32_t t_c0;
+    uint32_t t_c1;
+    float T_C;
+    float T_C_prime;
+    float internal_temperature;
 
     void setTimeConst(uint32_t time_const) { this->tau = time_const; };
     void setIntTempFunct(float (*read_temp_funct)(void)) {
@@ -47,18 +60,6 @@ class TraceHeater {
     float calculateAmbientTemperature(float tau, float t, float initTemp, float afterTemp);
     void turn_on_heater() { digitalWrite(TRACE_HEATER_PIN, TRACE_HEATER_ON); }
     void turn_off_heater() { digitalWrite(TRACE_HEATER_PIN, !TRACE_HEATER_ON); }
-    trace_heater_st_t state;
-    float T_E;
-    uint32_t t_h;
-    uint32_t t_h0;
-    uint32_t t_h1;
-    float T_H;
-    float T_H_prime;
-    uint32_t t_c;
-    uint32_t t_c0;
-    uint32_t t_c1;
-    float T_C;
-    float T_C_prime;
     float (*read_ext_temp_funct)(void);
     float (*read_int_temp_funct)(void);
     uint32_t (*read_unix_time_funct)(void);
