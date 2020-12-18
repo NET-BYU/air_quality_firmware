@@ -244,6 +244,7 @@ void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
 
 void Sensors::readTraceHeater(SensorPacket *packet, PersistentConfig *config) {
     if (config->data.traceHeaterEnabled) {
+        // TODO: Add some logic ignoring cases where the estimated temperature is not accurate
         packet->estimated_temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
         packet->has_estimated_temperature = true;
     }
