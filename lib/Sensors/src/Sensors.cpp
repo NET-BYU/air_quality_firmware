@@ -16,8 +16,8 @@ void Sensors::setup(PersistentConfig *config) {
     setupTempHum();
     setupCOSensor();
     setupEnergySensor();
-    setupTraceHeater(config);
     setupDHT22();
+    setupTraceHeater(config);
 }
 
 bool Sensors::isRTCPresent() {
@@ -237,6 +237,7 @@ void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
         sensorLog.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld",
                        packet->internal_temperature, packet->internal_humidity);
     } else {
+        sensorLog.error("can't read from SHT31");
         sht31.begin(TEMP_HUM_I2C_ADDR);
     }
 }
