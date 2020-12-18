@@ -101,6 +101,8 @@ Timer connectingTimer(60000,
 
 #define LENGTH_HEADER_SIZE 2
 
+unsigned int counter = 0;
+
 // Logging
 Logger encodeLog("app.encode");
 Logger serialLog("app.serial");
@@ -111,8 +113,8 @@ SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVE
                                      {"app.Sensor", LOG_LEVEL_INFO},
                                      {"app.encode", LOG_LEVEL_INFO},
                                      {"app.csv", LOG_LEVEL_NONE},
-                                     {"FileAckTracker", LOG_LEVEL_INFO},
-                                     {"MemoryAckTracker", LOG_LEVEL_TRACE},
+                                     {"FileAckTracker", LOG_LEVEL_WARN},
+                                     {"MemoryAckTracker", LOG_LEVEL_WARN},
                                      {"TraceHeater", LOG_LEVEL_INFO}});
 
 SdCardLogHandler<2048> csvLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_NONE,
@@ -394,19 +396,19 @@ AckTracker *getAckTrackerForWriting() {
 }
 
 AckTracker *getAckTrackerForReading() {
-    Log.info("Getting AckTracker for reading...");
+    Log.trace("Getting AckTracker for reading...");
     if (currentlyPublishing) {
         Log.info("Currently publishing so keep the same AckTracker.");
         return currentTracker;
     }
 
     if (!fileTracker.begin()) {
-        Log.info("Unable to start fileTracker so using memoryTracker.");
+        Log.warn("Unable to start fileTracker so using memoryTracker.");
         currentTracker = &memoryTracker;
         return currentTracker;
     }
 
-    Log.info("Using fileTracker");
+    Log.trace("Using fileTracker");
     currentTracker = &fileTracker;
 
     uint32_t memoryUnconfirmedCount = 0;
