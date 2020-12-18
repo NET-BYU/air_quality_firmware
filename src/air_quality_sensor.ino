@@ -272,6 +272,11 @@ void loop() // Print out RTC status in loop
         doc["rtc"] = allSensors->getRTCPresent();
         doc["pm"] = allSensors->getPmSensorSetup();
         doc["air"] = allSensors->getAirSensorSetup();
+        doc["trace_heater"]["state"] = (int)allSensors->traceHeater.state;
+        doc["trace_heater"]["T_H"] = allSensors->traceHeater.T_H;
+        doc["trace_heater"]["T_C"] = allSensors->traceHeater.T_C;
+        doc["trace_heater"]["current_temp"] = allSensors->traceHeater.internal_temperature;
+        doc["trace_heater"]["estimate"] = allSensors->traceHeater.getEstimatedTemperature();
 
         char output[200];
         serializeJson(doc, output, sizeof(output));
