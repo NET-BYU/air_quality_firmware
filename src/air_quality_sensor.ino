@@ -343,9 +343,10 @@ void loop() // Print out RTC status in loop
         Log.info("Time is set to: %ld", timestamp);
     }
 
-    if (config.data.traceHeaterEnabled) {
+    if (config.data.traceHeaterEnabled && (counter % 500 == 0)) {
         allSensors->traceHeater.trace_heater_loop();
     }
+    counter++;
 
     // Battery detection and handling, for keeping 5V sensors on with 3V battery
 #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
