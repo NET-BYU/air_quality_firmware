@@ -247,6 +247,14 @@ void Sensors::readTraceHeater(SensorPacket *packet, PersistentConfig *config) {
         // TODO: Add some logic ignoring cases where the estimated temperature is not accurate
         packet->estimated_temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
         packet->has_estimated_temperature = true;
+        packet->trace_heater_state = traceHeater.state;
+        packet->has_trace_heater_state = true;
+        packet->trace_heater_th = (int32_t)round(traceHeater.T_H * 10);
+        packet->has_trace_heater_th = true;
+        packet->trace_heater_tc = (int32_t)round(traceHeater.T_C * 10);
+        packet->has_trace_heater_tc = true;
+        packet->trace_heater_current_temp = (int32_t)round(traceHeater.internal_temperature * 10);
+        packet->has_trace_heater_current_temp = true;
     }
 }
 
