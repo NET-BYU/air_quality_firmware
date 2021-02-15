@@ -63,5 +63,6 @@ void PersistentConfig::print() {
     Log.info("\tdelayBeforeReboot: %ld", data.delayBeforeReboot);
     Log.info("\tcountryVoltage: %ld", data.countryVoltage);
     Log.info("\theaterPowerFactor: %ld", data.heaterPowerFactor);
+    Log.info("\ttraceHeaterEnabled: %ld", data.traceHeaterEnabled);
     Log.info("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
 }

@@ -16,8 +16,8 @@ void Sensors::setup(PersistentConfig *config) {
     setupTempHum();
     setupCOSensor();
     setupEnergySensor();
-    setupTraceHeater(config);
     setupDHT22();
+    setupTraceHeater(config);
 }
 
 bool Sensors::isRTCPresent() {
@@ -51,7 +51,7 @@ float Sensors::readACCurrentValue() {
         delay(1);
     }
     peakVoltage = peakVoltage / 1000;
-    Serial.printf("ADC:%x\t\t", peakVoltage);
+    sensorLog.info("ADC:%x\t\t", peakVoltage);
     voltageVirtualValue =
         peakVoltage * 0.707; // change the peak voltage to the Virtual Value of voltage
 
@@ -99,10 +99,10 @@ void Sensors::setupAir() {
 void Sensors::setupTempHum() {
     tempHumPresent = true;
     if (!sht31.begin(TEMP_HUM_I2C_ADDR)) {
-        Serial.println("Couldn't find SHT31 (temp humidity)!");
+        sensorLog.error("Couldn't find SHT31 (temp humidity)!");
         tempHumPresent = false;
     }
-    Serial.printf("sht31 status = %d\n", sht31.readStatus());
+    sensorLog.info("sht31 status = %d\n", sht31.readStatus());
 }
 
 void Sensors::setupResetReason() {
@@ -237,14 +237,24 @@ void Sensors::readTemHumSensor(SensorPacket *packet, PersistentConfig *config) {
         sensorLog.info("readTemHumSensor(): tempHum - temp=%ld, hum=%ld",
                        packet->internal_temperature, packet->internal_humidity);
     } else {
+        sensorLog.error("can't read from SHT31");
         sht31.begin(TEMP_HUM_I2C_ADDR);
     }
 }
 
 void Sensors::readTraceHeater(SensorPacket *packet, PersistentConfig *config) {
     if (config->data.traceHeaterEnabled) {
+        // TODO: Add some logic ignoring cases where the estimated temperature is not accurate
         packet->estimated_temperature = (int32_t)round(traceHeater.getEstimatedTemperature() * 10);
         packet->has_estimated_temperature = true;
+        packet->trace_heater_state = traceHeater.state;
+        packet->has_trace_heater_state = true;
+        packet->trace_heater_th = (int32_t)round(traceHeater.T_H * 10);
+        packet->has_trace_heater_th = true;
+        packet->trace_heater_tc = (int32_t)round(traceHeater.T_C * 10);
+        packet->has_trace_heater_tc = true;
+        packet->trace_heater_current_temp = (int32_t)round(traceHeater.internal_temperature * 10);
+        packet->has_trace_heater_current_temp = true;
     }
 }
 

@@ -91,8 +91,8 @@ Timer resetTimer(config.data.delayBeforeReboot, resetDevice,
 bool updateRTCFlag = false;
 Timer updateRtcTimer(3600000, []() { updateRTCFlag = true; });
 
-bool handleHeaterFlag = true;
-Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() { handleHeaterFlag = true; });
+// bool handleHeaterFlag = true;
+// Timer traceHeaterTimer(TRACE_HEATER_TIMER_PERIOD, []() { handleHeaterFlag = true; });
 
 #define MAX_RECONNECT_COUNT 30
 uint32_t connectingCounter = 0;
@@ -100,6 +100,8 @@ Timer connectingTimer(60000,
                       checkConnecting); // Time it will try to connect before reseting the device
 
 #define LENGTH_HEADER_SIZE 2
+
+unsigned int counter = 0;
 
 // Logging
 Logger encodeLog("app.encode");
@@ -111,8 +113,8 @@ SdCardLogHandler<2048> sdLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVE
                                      {"app.Sensor", LOG_LEVEL_INFO},
                                      {"app.encode", LOG_LEVEL_INFO},
                                      {"app.csv", LOG_LEVEL_NONE},
-                                     {"FileAckTracker", LOG_LEVEL_INFO},
-                                     {"MemoryAckTracker", LOG_LEVEL_TRACE},
+                                     {"FileAckTracker", LOG_LEVEL_WARN},
+                                     {"MemoryAckTracker", LOG_LEVEL_WARN},
                                      {"TraceHeater", LOG_LEVEL_INFO}});
 
 SdCardLogHandler<2048> csvLogHandler(sd, SD_CHIP_SELECT, SPI_FULL_SPEED, LOG_LEVEL_NONE,
@@ -136,8 +138,7 @@ STARTUP(System.enableFeature(FEATURE_RESET_INFO));
 void setup() {
     // Set up cloud functions
     Particle.function("reset", cloudReset);
-    Particle.function("resetCo", cloudResetCoprocessor);
-    Particle.function("unack", cloudUnackMeasurement);
+    // Particle.function("unack", cloudUnackMeasurement);
     Particle.function("param", cloudParameters);
 
     allSensors->setup(&config);
@@ -177,7 +178,7 @@ void setup() {
     uploadTimer.start();
     connectingTimer.start();
     updateRtcTimer.start();
-    traceHeaterTimer.start();
+    // traceHeaterTimer.start();
 
     if (config.data.enablePrintSystemInfo) {
         printSystemInfoTimer.start();
@@ -273,6 +274,11 @@ void loop() // Print out RTC status in loop
         doc["rtc"] = allSensors->getRTCPresent();
         doc["pm"] = allSensors->getPmSensorSetup();
         doc["air"] = allSensors->getAirSensorSetup();
+        doc["trace_heater"]["state"] = (int)allSensors->traceHeater.state;
+        doc["trace_heater"]["T_H"] = allSensors->traceHeater.T_H;
+        doc["trace_heater"]["T_C"] = allSensors->traceHeater.T_C;
+        doc["trace_heater"]["current_temp"] = allSensors->traceHeater.internal_temperature;
+        doc["trace_heater"]["estimate"] = allSensors->traceHeater.getEstimatedTemperature();
 
         char output[200];
         serializeJson(doc, output, sizeof(output));
@@ -339,13 +345,10 @@ void loop() // Print out RTC status in loop
         Log.info("Time is set to: %ld", timestamp);
     }
 
-    if (handleHeaterFlag) {
-        if (config.data.traceHeaterEnabled) {
-            Log.info("handling heater!");
-            allSensors->traceHeater.tick();
-        }
-        handleHeaterFlag = false;
+    if (config.data.traceHeaterEnabled && (counter % 500 == 0)) {
+        allSensors->traceHeater.trace_heater_loop();
     }
+    counter++;
 
     // Battery detection and handling, for keeping 5V sensors on with 3V battery
 #if PLATFORM_ID == PLATFORM_BORON // Only for Particle Boron microcontroller
@@ -393,19 +396,19 @@ AckTracker *getAckTrackerForWriting() {
 }
 
 AckTracker *getAckTrackerForReading() {
-    Log.info("Getting AckTracker for reading...");
+    Log.trace("Getting AckTracker for reading...");
     if (currentlyPublishing) {
         Log.info("Currently publishing so keep the same AckTracker.");
         return currentTracker;
     }
 
     if (!fileTracker.begin()) {
-        Log.info("Unable to start fileTracker so using memoryTracker.");
+        Log.warn("Unable to start fileTracker so using memoryTracker.");
         currentTracker = &memoryTracker;
         return currentTracker;
     }
 
-    Log.info("Using fileTracker");
+    Log.trace("Using fileTracker");
     currentTracker = &fileTracker;
 
     uint32_t memoryUnconfirmedCount = 0;
@@ -565,16 +568,8 @@ void checkConnecting() {
 }
 
 void resetDevice() {
-    Log.info("Rebooting coprocessor...");
-    resetCoprocessor();
-
     Log.info("Rebooting myself...");
     System.reset();
-}
-
-void resetCoprocessor() {
-    Serial1.printf("reset");
-    Serial1.flush();
 }
 
 int cloudReset(String arg) {
@@ -583,16 +578,10 @@ int cloudReset(String arg) {
     return 0;
 }
 
-int cloudResetCoprocessor(String arg) {
-    Serial.println("Cloud reset coprocessor called...");
-    resetCoprocessor();
-    return 0;
-}
-
-int cloudUnackMeasurement(String arg) {
-    // TODO: Put code here...
-    return 0;
-}
+// int cloudUnackMeasurement(String arg) {
+//     // TODO: Put code here...
+//     return 0;
+// }
 
 int cloudCommand(const char *cloudCommand, int32_t value, bool settingValue, uint32_t &configVal) {
     if (settingValue) {
